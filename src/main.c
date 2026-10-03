@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <limits.h>
+#include "mensagens.h"
+#include "memoria.h"
 
 int main(int argc, char *argv[]) {
 
@@ -50,8 +52,13 @@ int main(int argc, char *argv[]) {
     int paradigma;
     numero_produtores = (int)valores[0];
     paradigma = (int)valores[1];
-    printf("Produtores: %d\n", numero_produtores);
-    printf("Paradigma: %d\n", paradigma);
 
-    return 0;
+    if (paradigma == 1) {
+        return executar_memoria(numero_produtores);
+    }
+
+    else {
+       return executar_mensagens(numero_produtores);
+    }
+
 }
