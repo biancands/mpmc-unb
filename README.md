@@ -53,7 +53,3 @@ Os stubs permitem compilar e testar um paradigma mesmo quando o outro ainda não
 | `make memoria` | memória real + stub de mensagens | `build/mpmc-shm` |
 | `make completo` | ambas as implementações reais | `build/mpmc` |
 | `make clean` | remove os arquivos gerados | - |
-
-## Estado atual
-
-A estrutura, os contratos entre os módulos, os stubs e os alvos de compilação estão configurados. O `main.c` ainda contém somente um `Hello, World!`; a validação dos argumentos será implementada na próxima etapa.
