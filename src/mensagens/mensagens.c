@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -402,11 +404,13 @@ void novo_processo(struct node_pid **head, pid_t novo_pid) {
 }
 
 void produz(long p, long n_msgs, long ack) {
-    printf("produzindo %d mensagens na fila %d", n_msgs, p);
+    (void)ack;
+    printf("produzindo %ld mensagens na fila %ld", n_msgs, p);
 }
 
 void consome(long p, long n_msgs, long ack) {
-    printf("consumindo %d mensagens da fila %d", n_msgs, p);
+    (void)ack;
+    printf("consumindo %ld mensagens da fila %ld", n_msgs, p);
 }
 
 void shutdown(struct node_pid *head) {
@@ -429,5 +433,6 @@ void shutdown(struct node_pid *head) {
 }
 
 void stop(int sig) {
+    (void)sig;
     exit(0);
 }
