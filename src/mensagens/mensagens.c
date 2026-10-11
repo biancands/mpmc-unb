@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include "mensagens.h"
 #include <signal.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 
 struct mensagem {
     long mtype;  // define a categoria da mensagem
@@ -35,6 +37,7 @@ static void consome(long p, long n_msgs, long ack);
 static int registrar_processo(struct node_pid **head, pid_t novo_pid);
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
+static void remover_filas(int *ids_filas, int quantidade_filas);
 
 int executar_mensagens(int numero_produtores)
 {
@@ -46,6 +49,25 @@ int executar_mensagens(int numero_produtores)
     }
 
     struct node_pid *head = NULL;
+
+    int *ids_filas;
+
+    ids_filas = malloc(numero_produtores * sizeof(int));
+
+    if (ids_filas == NULL) {
+        perror("malloc");
+        return 1;
+    }
+
+    for (int indice_fila = 0; indice_fila < numero_produtores; indice_fila++) {
+        ids_filas[indice_fila] = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
+        if (ids_filas[indice_fila] == -1) {
+            perror("msgget");
+            remover_filas(ids_filas, indice_fila);
+            free(ids_filas);
+            return 1;
+        }
+    }
 
     while (1)
     {
@@ -65,6 +87,10 @@ int executar_mensagens(int numero_produtores)
                 perror("fgets");
             }
             encerrar_processos(head);
+
+            remover_filas(ids_filas, numero_produtores);
+
+            free(ids_filas);
             return resultado != 0;
         }
 
@@ -112,6 +138,10 @@ int executar_mensagens(int numero_produtores)
             }
             else {
                 encerrar_processos(head);
+
+                remover_filas(ids_filas, numero_produtores);
+
+                free(ids_filas);
                 liberar_tokens(tokens);
                 return 0;
             }
@@ -262,6 +292,14 @@ static void liberar_tokens(char **tokens) {
         i++;
     }
     free(tokens);
+}
+
+static void remover_filas(int *ids_filas, int quantidade_filas) {
+    for (int indice_fila = 0; indice_fila < quantidade_filas; indice_fila++) {
+        if (msgctl(ids_filas[indice_fila], IPC_RMID, NULL) == -1) {
+            perror("msgctl");
+        }
+    }
 }
 
 static char **split(const char *str, const char *delim)
