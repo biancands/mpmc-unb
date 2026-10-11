@@ -33,14 +33,12 @@ void adicionar_processo(struct node_pid **head, pid_t novo_pid);
 void shutdown(struct node_pid *head);
 void produz(long p, long n_msgs, long ack);
 void consome(long p, long n_msgs, long ack);
-void stop(int sig);
 void novo_processo(struct node_pid **head, pid_t novo_pid);
 void recolher_filhos(int sig);
 
 int executar_mensagens(int numero_produtores)
 {
     printf("Executando o paradigma de troca de mensagens com %d produtores...\n", numero_produtores);
-    signal(SIGTERM, stop);
     signal(SIGCHLD, recolher_filhos);
 
     struct node_pid *head = NULL;
@@ -427,26 +425,32 @@ void consome(long p, long n_msgs, long ack) {
 
 void shutdown(struct node_pid *head) {
     struct node_pid *atual = head;
+    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
+        perror("signal");
+    }
     while (atual != NULL) {
         struct node_pid *proximo = atual->next;
-        
-        if (kill(atual->pid, SIGTERM) == -1) {
-            // Só avisa se o erro não for "Processo já inexistente"
-            if (errno != ESRCH) {
-                fprintf(stderr, "Erro ao enviar sinal para o processo %d: %s\n", atual->pid, strerror(errno));
+
+        pid_t resultado = waitpid(atual->pid, NULL, WNOHANG);
+
+        if (resultado == 0) {
+            if (kill(atual->pid, SIGTERM) == -1) {
+                // Só avisa se o erro não for "Processo já inexistente"
+                if (errno != ESRCH) {
+                    fprintf(stderr, "Erro ao enviar sinal para o processo %d: %s\n", atual->pid, strerror(errno));
+                }
+            } else {
+                if (waitpid(atual->pid, NULL, 0) == -1 && errno != ECHILD) {
+                    perror("waitpid");
+                }
             }
-        } else {
-            waitpid(atual->pid, NULL, 0);
+        } else if (resultado == -1 && errno != ECHILD) {
+            perror("waitpid");
         }
 
         free(atual);
         atual = proximo;
     }
-}
-
-void stop(int sig) {
-    (void)sig;
-    exit(0);
 }
 
 void recolher_filhos(int sig) {
