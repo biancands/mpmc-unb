@@ -35,11 +35,13 @@ void produz(long p, long n_msgs, long ack);
 void consome(long p, long n_msgs, long ack);
 void stop(int sig);
 void novo_processo(struct node_pid **head, pid_t novo_pid);
+void recolher_filhos(int sig);
 
 int executar_mensagens(int numero_produtores)
 {
     printf("Executando o paradigma de troca de mensagens com %d produtores...\n", numero_produtores);
     signal(SIGTERM, stop);
+    signal(SIGCHLD, recolher_filhos);
 
     struct node_pid *head = NULL;
     
@@ -232,6 +234,7 @@ int executar_mensagens(int numero_produtores)
 
         printf("Valores extraídos: p = %ld, n_msgs = %ld, ack = %ld\n", p, n_msgs, ack);
 
+        fflush(NULL);
         pid_t pid = fork();
     
         if (pid < 0) {
@@ -444,4 +447,11 @@ void shutdown(struct node_pid *head) {
 void stop(int sig) {
     (void)sig;
     exit(0);
+}
+
+void recolher_filhos(int sig) {
+    (void)sig;
+    int errno_salvo = errno;
+    while (waitpid(-1, NULL, WNOHANG) > 0) { }
+    errno = errno_salvo;
 }
