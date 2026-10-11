@@ -55,6 +55,16 @@ int executar_mensagens(int numero_produtores)
         {
             return 0;
         }
+
+        if (strchr(buffer, '\n') == NULL && !feof(stdin)) {
+            int caractere;
+
+            while ((caractere = fgetc(stdin)) != '\n' && caractere != EOF) { }
+
+            fprintf(stderr, "Erro: comando excede o tamanho máximo permitido.\n");
+            continue;
+        }
+
         buffer[strcspn(buffer, "\r\n")] = '\0'; // Remove a quebra de linha do final
 
         char **tokens = split(buffer, " \t\n");
