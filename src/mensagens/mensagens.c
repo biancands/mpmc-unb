@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <limits.h> // Para usar INT_MIN e INT_MAX
@@ -217,8 +216,7 @@ char **split(const char *str, const char *delim)
 }
 
 // Função para converter string em inteiro com validação robusta
-int converter_para_inteiro(const char *str, int *sucesso)
-{
+int converter_para_inteiro(const char *str, int *sucesso) {
     char *fim;
     errno = 0; // Limpa o erro antes da conversão
 
@@ -226,7 +224,7 @@ int converter_para_inteiro(const char *str, int *sucesso)
 
     // 1. Verifica se houve estouro de capacidade (ERANGE)
     // 2. Verifica se o valor cabe em um 'int' normal (evita valores gigantescos)
-    if (errno == ERANGE && (val > INT_MAX || val < INT_MIN))
+    if (errno == ERANGE || val > INT_MAX || val < INT_MIN)
     {
         fprintf(stderr, "Erro: Número fora do intervalo suportado.\n");
         *sucesso = 0;
