@@ -27,31 +27,45 @@ struct node_fila {
     struct node_fila *next;
 };
 
-char **split(const char *str, const char *delim);
-int converter_para_inteiro(const char *str, int *sucesso);
-void adicionar_processo(struct node_pid **head, pid_t novo_pid);
-void shutdown(struct node_pid *head);
-void produz(long p, long n_msgs, long ack);
-void consome(long p, long n_msgs, long ack);
-void novo_processo(struct node_pid **head, pid_t novo_pid);
-void recolher_filhos(int sig);
+static char **split(const char *str, const char *delim);
+static int converter_para_inteiro(const char *str, int *sucesso);
+static void encerrar_processos(struct node_pid *head);
+static void produz(long p, long n_msgs, long ack);
+static void consome(long p, long n_msgs, long ack);
+static int registrar_processo(struct node_pid **head, pid_t novo_pid);
+static void recolher_filhos(int sig);
+static void liberar_tokens(char **tokens);
 
 int executar_mensagens(int numero_produtores)
 {
     printf("Executando o paradigma de troca de mensagens com %d produtores...\n", numero_produtores);
-    signal(SIGCHLD, recolher_filhos);
+
+    if (signal(SIGCHLD, recolher_filhos) == SIG_ERR) {
+        perror("signal");
+        return 1;
+    }
 
     struct node_pid *head = NULL;
-    
+
     while (1)
     {
         printf(">> ");
         fflush(stdout);
 
         char buffer[256];
+
         if (fgets(buffer, sizeof(buffer), stdin) == NULL)
         {
-            return 0;
+            if (ferror(stdin) && errno == EINTR) {
+                clearerr(stdin);
+                continue;
+            }
+            int resultado = ferror(stdin);
+            if (resultado != 0) {
+                perror("fgets");
+            }
+            encerrar_processos(head);
+            return resultado != 0;
         }
 
         if (strchr(buffer, '\n') == NULL && !feof(stdin)) {
@@ -74,7 +88,7 @@ int executar_mensagens(int numero_produtores)
 
         if (tokens[0] == NULL)
         {
-            free(tokens);
+            liberar_tokens(tokens);
             continue;
         }
 
@@ -93,19 +107,12 @@ int executar_mensagens(int numero_produtores)
         if (is_shutdown) {
             if (numTokens != 1) {
                 fprintf(stderr, "Mensagem inválida. O comando 'shutdown' não aceita argumentos.\n");
-                for (int i = 0; i < numTokens; i++) {
-                    free(tokens[i]);
-                }
-                free(tokens);
+                liberar_tokens(tokens);
                 continue;
             }
             else {
-                shutdown(head);
-                for (int i = 0; i < numTokens; i++)
-                {
-                    free(tokens[i]);
-                }
-                free(tokens);
+                encerrar_processos(head);
+                liberar_tokens(tokens);
                 return 0;
             }
         }
@@ -113,33 +120,20 @@ int executar_mensagens(int numero_produtores)
         if (!is_produz && !is_consome)
         {
             fprintf(stderr, "Mensagem inválida. Esperado 'produz' ou 'consome' como primeiro token.\n");
-
-            for (int i = 0; i < numTokens; i++)
-            {
-                free(tokens[i]);
-            }
-            free(tokens);
-            continue;;
+            liberar_tokens(tokens);
+            continue;
         }
 
         if (numTokens != 5)
         {
             fprintf(stderr, "Mensagem inválida. Esperado exatamente 5 tokens.\n");
-            for (int i = 0; i < numTokens; i++)
-            {
-                free(tokens[i]);
-            }
-            free(tokens);
+            liberar_tokens(tokens);
             continue;
         }
 
         if (strcmp(tokens[4], "&") != 0) {
             fprintf(stderr, "Mensagem inválida. O último token deve ser '&'.\n");
-            for (int i = 0; i < numTokens; i++) {
-                free(tokens[i]);
-            }
-            free(tokens);
-
+            liberar_tokens(tokens);
             continue;
         }
 
@@ -148,22 +142,18 @@ int executar_mensagens(int numero_produtores)
         for (int i = 1; i < numTokens - 1; i++)
         {
             int sucesso;
-            int p = converter_para_inteiro(tokens[i], &sucesso);
+            int valor_convertido = converter_para_inteiro(tokens[i], &sucesso);
             if (!sucesso)
             {
                 fprintf(stderr, "Erro ao converter o token %d para inteiro.\n", i);
                 fprintf(stderr, "Token: %s\n", tokens[i]);
 
                 // Libera a memória alocada para os tokens
-                for (int i = 0; i < numTokens; i++)
-                {
-                    free(tokens[i]);
-                }
-                free(tokens);
+                liberar_tokens(tokens);
                 error_conversao = 1;
                 break;
             }
-            valores[i - 1] = p;
+            valores[i - 1] = valor_convertido;
         }
 
         if (error_conversao) {
@@ -176,19 +166,13 @@ int executar_mensagens(int numero_produtores)
 
         if (ack != 1 && ack != 2) {
             fprintf(stderr, "Ack deve ser 1 ou 2.\n");
-            for (int i = 0; i < numTokens; i++) {
-                free(tokens[i]);
-            }
-            free(tokens);
+            liberar_tokens(tokens);
             continue;
         }
 
         if (n_msgs <= 0 || n_msgs > 1024) {
             fprintf(stderr, "O número de mensagens deve estar entre 1 e 1024\n");
-            for (int i = 0; i < numTokens; i++) {
-                free(tokens[i]);
-            }
-            free(tokens);
+            liberar_tokens(tokens);
             continue;
         }
 
@@ -200,10 +184,7 @@ int executar_mensagens(int numero_produtores)
             }
             else {
                 fprintf(stderr, "Erro: para 'produz', p deve estar entre 0 e %d.\n", numero_produtores);
-                for (int i = 0; i < numTokens; i ++) {
-                    free(tokens[i]);
-                }
-                free(tokens);
+                liberar_tokens(tokens);
                 continue;
             }
         }
@@ -215,18 +196,12 @@ int executar_mensagens(int numero_produtores)
             }
             else {
                 fprintf(stderr, "Erro: para 'consome', p deve estar entre 1 e %d.\n", numero_produtores);
-                for (int i = 0; i < numTokens; i ++) {
-                    free(tokens[i]);
-                }
-                free(tokens);
+                liberar_tokens(tokens);
                 continue;
             }
         }
 
-        for (int i = 0; i < numTokens; i++) {
-            free(tokens[i]);
-        }
-        free(tokens);
+        liberar_tokens(tokens);
 
         printf("Mensagem processada com sucesso.\n");
 
@@ -258,7 +233,17 @@ int executar_mensagens(int numero_produtores)
         } 
         // pai
         else {
-            novo_processo(&head, pid);
+            if(registrar_processo(&head, pid) == 0) {
+                if (kill(pid, SIGTERM) == -1) {
+                    if (errno != ESRCH) {
+                        perror("kill");
+                    }
+                } else {
+                    if ((waitpid(pid, NULL, 0) == -1) && errno != ECHILD) {
+                        perror("waitpid");
+                    }
+                }
+            }
         }
 
         
@@ -267,7 +252,19 @@ int executar_mensagens(int numero_produtores)
     return 1;
 }
 
-char **split(const char *str, const char *delim)
+static void liberar_tokens(char **tokens) {
+    if (tokens == NULL) {
+        return;
+    }
+    int i = 0;
+    while (tokens[i] != NULL) {
+        free(tokens[i]);
+        i++;
+    }
+    free(tokens);
+}
+
+static char **split(const char *str, const char *delim)
 {
     int numChunks = 0;
     int beforeIsDelim = 1;
@@ -357,7 +354,7 @@ char **split(const char *str, const char *delim)
 }
 
 // Função para converter string em inteiro com validação robusta
-int converter_para_inteiro(const char *str, int *sucesso) {
+static int converter_para_inteiro(const char *str, int *sucesso) {
     char *fim;
     errno = 0; // Limpa o erro antes da conversão
 
@@ -392,11 +389,11 @@ int converter_para_inteiro(const char *str, int *sucesso) {
     return (int)val;
 }
 
-void novo_processo(struct node_pid **head, pid_t novo_pid) {
+static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
     struct node_pid *next = malloc(sizeof(struct node_pid));
     if (next == NULL) {
         fprintf(stderr, "Erro ao alocar memória para o nó.\n");
-        return;
+        return 0;
     }
     
     next->pid = novo_pid;
@@ -411,19 +408,20 @@ void novo_processo(struct node_pid **head, pid_t novo_pid) {
         }
         atual->next = next;
     }
+    return 1;
 }
 
-void produz(long p, long n_msgs, long ack) {
+static void produz(long p, long n_msgs, long ack) {
     (void)ack;
     printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
 }
 
-void consome(long p, long n_msgs, long ack) {
+static void consome(long p, long n_msgs, long ack) {
     (void)ack;
     printf("consumindo %ld mensagens da fila %ld\n", n_msgs, p);
 }
 
-void shutdown(struct node_pid *head) {
+static void encerrar_processos(struct node_pid *head) {
     struct node_pid *atual = head;
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
@@ -453,9 +451,10 @@ void shutdown(struct node_pid *head) {
     }
 }
 
-void recolher_filhos(int sig) {
+static void recolher_filhos(int sig) {
     (void)sig;
     int errno_salvo = errno;
+    signal(SIGCHLD, recolher_filhos);
     while (waitpid(-1, NULL, WNOHANG) > 0) { }
     errno = errno_salvo;
 }
