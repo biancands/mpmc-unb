@@ -63,6 +63,16 @@ int executar_mensagens(int numero_produtores)
             continue;
         }
 
+        if (strcmp(tokens[4], "&") != 0) {
+            fprintf(stderr, "Mensagem inválida. O último token deve ser '&'.\n");
+            for (int i = 0; i < numTokens; i++) {
+                free(tokens[i]);
+            }
+            free(tokens);
+
+            continue;
+        }
+
         if (strcmp(tokens[0], "produz") != 0 && strcmp(tokens[0], "consome") != 0)
         {
             fprintf(stderr, "Mensagem inválida. Esperado 'produz' ou 'consome' como primeiro token.\n");
