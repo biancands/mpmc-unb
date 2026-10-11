@@ -48,6 +48,7 @@ int executar_mensagens(int numero_produtores)
     while (1)
     {
         printf(">> ");
+        fflush(stdout);
 
         char buffer[256];
         if (fgets(buffer, sizeof(buffer), stdin) == NULL)
@@ -55,7 +56,6 @@ int executar_mensagens(int numero_produtores)
             return 0;
         }
         buffer[strcspn(buffer, "\r\n")] = '\0'; // Remove a quebra de linha do final
-        printf("Mensagem recebida: %s\n", buffer);
 
         char **tokens = split(buffer, " \t\n");
         if (tokens == NULL)
@@ -69,6 +69,8 @@ int executar_mensagens(int numero_produtores)
             free(tokens);
             continue;
         }
+
+        printf("Mensagem recebida: %s\n", buffer);
 
         int is_shutdown = strcmp(tokens[0], "shutdown") == 0;
         int is_produz = strcmp(tokens[0], "produz") == 0;
