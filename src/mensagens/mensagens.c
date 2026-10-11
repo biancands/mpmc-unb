@@ -232,10 +232,11 @@ int executar_mensagens(int numero_produtores)
 
         printf("Valores extraídos: p = %ld, n_msgs = %ld, ack = %ld\n", p, n_msgs, ack);
 
-        int pid = fork();
+        pid_t pid = fork();
     
         if (pid < 0) {
-            fprintf(stderr, "Erro na criação do processo.\n");
+            perror("fork");
+            continue;
         }
         
         // filho
