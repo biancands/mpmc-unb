@@ -123,14 +123,37 @@ int executar_mensagens(int numero_produtores)
             continue;
         }
 
+        long p = valores[0];
+
+
         if (strcmp(tokens[0], "produz") == 0)
         {
-            printf("Mensagem de produção recebida.\n");
+            if (p >= 0 && p <= numero_produtores) {
+                printf("Mensagem de produção recebida.\n");
+            }
+            else {
+                fprintf(stderr, "Erro: para 'produz', p deve estar entre 0 e %d.\n", numero_produtores);
+                for (int i = 0; i < numTokens; i ++) {
+                    free(tokens[i]);
+                }
+                free(tokens);
+                continue;
+            }
         }
 
         else if (strcmp(tokens[0], "consome") == 0)
         {
-            printf("Mensagem de consumo recebida.\n");
+            if (p >= 1 && p <= numero_produtores) {
+                printf("Mensagem de consumo recebida.\n");
+            }
+            else {
+                fprintf(stderr, "Erro: para 'consome', p deve estar entre 1 e %d.\n", numero_produtores);
+                for (int i = 0; i < numTokens; i ++) {
+                    free(tokens[i]);
+                }
+                free(tokens);
+                continue;
+            }
         }
 
         // Libera a memória alocada para os tokens
@@ -141,7 +164,6 @@ int executar_mensagens(int numero_produtores)
         free(tokens);
 
         printf("Mensagem processada com sucesso.\n");
-        long p = valores[0];
         long n_msgs = valores[1];
         long ack = valores[2];
 
