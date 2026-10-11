@@ -124,7 +124,16 @@ int executar_mensagens(int numero_produtores)
         }
 
         long p = valores[0];
+        long n_msgs = valores[1];
 
+        if (n_msgs <= 0 || n_msgs > 1024) {
+            fprintf(stderr, "O número de mensagens deve estar entre 1 e 1024\n");
+            for (int i = 0; i < numTokens; i++) {
+                free(tokens[i]);
+            }
+            free(tokens);
+            continue;
+        }
 
         if (strcmp(tokens[0], "produz") == 0)
         {
@@ -164,7 +173,6 @@ int executar_mensagens(int numero_produtores)
         free(tokens);
 
         printf("Mensagem processada com sucesso.\n");
-        long n_msgs = valores[1];
         long ack = valores[2];
 
         printf("Valores extraídos: p = %ld, n_msgs = %ld, ack = %ld\n", p, n_msgs, ack);
