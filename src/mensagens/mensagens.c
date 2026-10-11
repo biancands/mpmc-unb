@@ -160,12 +160,6 @@ int executar_mensagens(int numero_produtores)
             continue;
         }
 
-        for (int i = 0; i < numTokens; i++)
-        {
-            free(tokens[i]);
-        }
-        free(tokens);
-
         long p = valores[0];
         long n_msgs = valores[1];
         long ack = valores[2];
@@ -219,6 +213,10 @@ int executar_mensagens(int numero_produtores)
             }
         }
 
+        for (int i = 0; i < numTokens; i++) {
+            free(tokens[i]);
+        }
+        free(tokens);
 
         printf("Mensagem processada com sucesso.\n");
 
@@ -405,12 +403,12 @@ void novo_processo(struct node_pid **head, pid_t novo_pid) {
 
 void produz(long p, long n_msgs, long ack) {
     (void)ack;
-    printf("produzindo %ld mensagens na fila %ld", n_msgs, p);
+    printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
 }
 
 void consome(long p, long n_msgs, long ack) {
     (void)ack;
-    printf("consumindo %ld mensagens da fila %ld", n_msgs, p);
+    printf("consumindo %ld mensagens da fila %ld\n", n_msgs, p);
 }
 
 void shutdown(struct node_pid *head) {
