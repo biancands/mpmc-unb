@@ -94,10 +94,11 @@ int executar_mensagens(int numero_produtores)
             }
             free(tokens);
 
-            return -1;
+            continue;
         }
 
         long valores[3];
+        int error_conversao = 0;
         for (int i = 1; i < numTokens - 1; i++)
         {
             int sucesso;
@@ -113,9 +114,13 @@ int executar_mensagens(int numero_produtores)
                     free(tokens[i]);
                 }
                 free(tokens);
-                return -1;
+                error_conversao = 1;
+                break;
             }
             valores[i - 1] = p;
+        }
+        if (error_conversao) {
+            continue;
         }
 
         if (strcmp(tokens[0], "produz") == 0)
