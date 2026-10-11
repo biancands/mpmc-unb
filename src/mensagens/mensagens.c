@@ -44,12 +44,22 @@ int executar_mensagens(int numero_produtores)
 
         if (strcmp(tokens[0], "shutdown") == 0) {
             // Lógica do shutdown
-            for (int i = 0; i < numTokens; i++)
-            {
-                free(tokens[i]);
+            if (numTokens != 1) {
+                fprintf(stderr, "Mensagem inválida. O comando 'shutdown' não aceita argumentos.\n");
+                for (int i = 0; i < numTokens; i++) {
+                    free(tokens[i]);
+                }
+                free(tokens);
+                continue;
             }
-            free(tokens);
-            return 0;
+            else {
+                for (int i = 0; i < numTokens; i++)
+                {
+                    free(tokens[i]);
+                }
+                free(tokens);
+                return 0;
+            }
         }
 
         if (numTokens != 5)
