@@ -32,7 +32,7 @@ struct node_fila {
 static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
 static void encerrar_processos(struct node_pid *head);
-static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
+static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
 static void consome(long p, long n_msgs, long ack);
 static int registrar_processo(struct node_pid **head, pid_t novo_pid);
 static void recolher_filhos(int sig);
@@ -249,8 +249,12 @@ int executar_mensagens(int numero_produtores)
         else if (pid == 0) {
             if (is_produz)
             {
-                produz(p, n_msgs, ack, ids_filas, numero_produtores);
-                printf("Mensagem de produção recebida.\n");
+                int resultado_producao;
+                resultado_producao = produz(p, n_msgs, ack, ids_filas, numero_produtores);
+                if (resultado_producao == 0){
+                    printf("Mensagem de produção recebida.\n");
+                }
+                exit(resultado_producao);
             }
 
             if (is_consome)
@@ -449,7 +453,7 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
     return 1;
 }
 
-static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores) {
+static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores) {
     (void)ack;
     struct mensagem mensagem;
     mensagem.mtype = 1;
@@ -466,7 +470,7 @@ static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_pro
         mensagem.tempo_envio = time(NULL);
         if(msgsnd(ids_filas[indice_fila], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
             perror("msgsnd");
-            return;
+            return 1;
         }
     }
     if (p != 0) {
@@ -474,6 +478,7 @@ static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_pro
     } else {
         printf("produzindo %ld mensagens no padrão striped\n", n_msgs);
     }
+    return 0;
 }
 
 static void consome(long p, long n_msgs, long ack) {
