@@ -13,6 +13,7 @@
 #include <sys/msg.h>
 
 #define TIPO_MENSAGEM 1
+#define TIPO_RESULTADO 1
 
 struct mensagem {
     long mtype;  // define a categoria da mensagem
@@ -20,6 +21,13 @@ struct mensagem {
     unsigned short seq;  // número sequencial da mensagem
     unsigned char requer_confirmacao;
     time_t tempo_envio;
+};
+
+struct resultado_processo {
+    long mtype;
+    time_t tempo_fim;
+    pid_t pid;
+    unsigned short mensagens_consumidas;
 };
 
 struct node_pid {
@@ -38,6 +46,7 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tem
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
 static void remover_filas(int *ids_filas, int quantidade_filas);
+static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_consumida);
 
 int executar_mensagens(int numero_produtores)
 {
@@ -255,6 +264,9 @@ int executar_mensagens(int numero_produtores)
                 if (resultado_producao == 0){
                     printf("Produção concluída com sucesso.\n");
                 }
+                if (enviar_resultado(ids_filas[numero_produtores], 0) == 1) {
+                    resultado_producao = 1;
+                }
                 exit(resultado_producao);
             }
 
@@ -265,6 +277,9 @@ int executar_mensagens(int numero_produtores)
                 resultado_consumo = consome(p, n_msgs, ack, ids_filas, &mensagens_consumidas);
                 if (resultado_consumo == 0) {
                     printf("Consumo concluído com sucesso.\n");
+                }
+                if (enviar_resultado(ids_filas[numero_produtores], mensagens_consumidas) == 1) {
+                    resultado_consumo = 1;
                 }
                 exit(resultado_consumo);
             }    
@@ -569,4 +584,18 @@ static void recolher_filhos(int sig) {
     signal(SIGCHLD, recolher_filhos);
     while (waitpid(-1, NULL, WNOHANG) > 0) { }
     errno = errno_salvo;
+}
+
+static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_consumida) {
+    struct resultado_processo resultado_processo;
+    resultado_processo.mtype = TIPO_RESULTADO;
+    resultado_processo.tempo_fim = time(NULL);
+    resultado_processo.pid = getpid();
+    resultado_processo.mensagens_consumidas = quantidade_consumida;
+
+    if (msgsnd(id_fila_resultados, &resultado_processo, (sizeof(resultado_processo) - sizeof(resultado_processo.mtype)), 0) == -1) {
+        perror("msgsnd");
+        return 1;
+    }
+    return 0;
 }
