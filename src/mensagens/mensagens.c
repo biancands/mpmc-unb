@@ -25,6 +25,8 @@ struct mensagem {
 struct node_pid {
     pid_t pid;
     struct node_pid *next;
+    time_t tempo_inicio;
+    int eh_consumidor;
 };
 
 static char **split(const char *str, const char *delim);
@@ -32,7 +34,7 @@ static int converter_para_inteiro(const char *str, int *sucesso);
 static void encerrar_processos(struct node_pid *head);
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
 static int consome(long p, long n_msgs, long ack, int *ids_filas);
-static int registrar_processo(struct node_pid **head, pid_t novo_pid);
+static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor);
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
 static void remover_filas(int *ids_filas, int quantidade_filas);
@@ -269,7 +271,7 @@ int executar_mensagens(int numero_produtores)
         } 
         // pai
         else {
-            if(registrar_processo(&head, pid) == 0) {
+            if(registrar_processo(&head, pid, time(NULL), is_consome) == 0) {
                 if (kill(pid, SIGTERM) == -1) {
                     if (errno != ESRCH) {
                         perror("kill");
@@ -433,7 +435,7 @@ static int converter_para_inteiro(const char *str, int *sucesso) {
     return (int)val;
 }
 
-static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
+static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor) {
     struct node_pid *next = malloc(sizeof(struct node_pid));
     if (next == NULL) {
         fprintf(stderr, "Erro ao alocar memória para o nó.\n");
@@ -442,6 +444,8 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
     
     next->pid = novo_pid;
     next->next = NULL;
+    next->tempo_inicio = tempo_inicio;
+    next->eh_consumidor = eh_consumidor;
 
     if (*head == NULL) {
         *head = next;
