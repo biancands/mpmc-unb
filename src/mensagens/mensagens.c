@@ -475,6 +475,14 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
             return 1;
         }
     }
+    if (ack == 1 && p != 0) {
+        for (int confirmacoes_recebidas = 0; confirmacoes_recebidas < n_msgs; confirmacoes_recebidas++) {
+            if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
+                perror("msgrcv");
+                return 1;
+            }
+        }
+    }
     if (p != 0) {
         printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
     } else {
