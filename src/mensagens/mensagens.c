@@ -12,6 +12,8 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 
+#define TIPO_MENSAGEM 1
+
 struct mensagem {
     long mtype;  // define a categoria da mensagem
     pid_t pid;     
@@ -455,7 +457,7 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
 
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores) {
     struct mensagem mensagem;
-    mensagem.mtype = 1;
+    mensagem.mtype = TIPO_MENSAGEM;
     mensagem.pid = getpid();
     mensagem.requer_confirmacao = (ack == 1) ? 1 : 0;
 
@@ -488,7 +490,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas) {
     }
     struct mensagem mensagem;
     for (int mensagens_recebidas = 0; mensagens_recebidas < n_msgs; mensagens_recebidas++) {
-        if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 1, flags_recebimento) == -1) {
+        if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), TIPO_MENSAGEM, flags_recebimento) == -1) {
             if (ack == 2 && errno == ENOMSG) {
                 fprintf(stderr, "Erro: foram solicitadas %ld mensagens, mas apenas %d foram consumidas.\n", n_msgs, mensagens_recebidas);
                 return 1;
