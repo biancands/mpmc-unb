@@ -495,6 +495,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas) {
         perror("msgrcv");
         return 1;
     }
+    printf("Mensagem consumida: pid=%d, seq=%d, tempo=%lld\n", (int)mensagem.pid, mensagem.seq, (long long)mensagem.tempo_envio);
     printf("consumindo %ld mensagens da fila %ld\n", n_msgs, p);
     return 0;
 }
