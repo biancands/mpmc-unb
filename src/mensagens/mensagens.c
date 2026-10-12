@@ -499,6 +499,13 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas) {
             return 1;
         }
         printf("Mensagem consumida: pid=%d, seq=%d, tempo=%lld\n", (int)mensagem.pid, mensagem.seq, (long long)mensagem.tempo_envio);
+        if (mensagem.requer_confirmacao == 1) {
+            mensagem.mtype = mensagem.pid;
+            if (msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
+                perror("msgsnd");
+                return 1;
+            }
+        }
     }
     printf("consumindo %ld mensagens da fila %ld\n", n_msgs, p);
     return 0;
