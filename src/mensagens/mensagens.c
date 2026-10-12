@@ -17,9 +17,9 @@
 struct mensagem {
     long mtype;  // define a categoria da mensagem
     pid_t pid;     
-    int seq;  // número sequencial da mensagem
+    unsigned short seq;  // número sequencial da mensagem
+    unsigned char requer_confirmacao;
     time_t tempo_envio;
-    int requer_confirmacao;
 };
 
 struct node_pid {
