@@ -46,9 +46,11 @@ static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
 static void remover_filas(int *ids_filas, int quantidade_filas);
 static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_consumida);
+static void interromper_filho(int sig);
 
 int executar_mensagens(int numero_produtores)
 {
+    time_t tempo_inicio_mpmc = time(NULL);
     int quantidade_filas = numero_produtores + 1;
     printf("Executando o paradigma de troca de mensagens com %d produtores...\n", numero_produtores);
 
@@ -147,6 +149,8 @@ int executar_mensagens(int numero_produtores)
             }
             else {
                 encerrar_processos(head, ids_filas[numero_produtores]);
+
+                printf("Tempo total do mpmc: %.0f segundos.\n", difftime(time(NULL), tempo_inicio_mpmc));
 
                 remover_filas(ids_filas, quantidade_filas);
 
@@ -256,6 +260,10 @@ int executar_mensagens(int numero_produtores)
         
         // filho
         else if (pid == 0) {
+            if (signal(SIGTERM, interromper_filho) == SIG_ERR) {
+                perror("signal");
+                exit(1);
+            }
             if (is_produz)
             {
                 int resultado_producao;
@@ -491,6 +499,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
         mensagem.seq = sequencia;
         mensagem.tempo_envio = time(NULL);
         if(msgsnd(ids_filas[indice_fila], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
+            if (errno == EINTR) {
+                return 1;
+            }
             perror("msgsnd");
             return 1;
         }
@@ -504,6 +515,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
                 indice_fila_confirmacao = p - 1;
             }
             if (msgrcv(ids_filas[indice_fila_confirmacao], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
+                if (errno == EINTR) {
+                    return 1;
+                }
                 perror("msgrcv");
                 return 1;
             }
@@ -530,6 +544,9 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
                 fprintf(stderr, "Erro: foram solicitadas %ld mensagens, mas apenas %d foram consumidas.\n", n_msgs, mensagens_recebidas);
                 return 1;
             }
+            if (errno == EINTR) {
+                return 1;
+            }
             perror("msgrcv");
             return 1;
         }
@@ -538,6 +555,9 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
         if (mensagem.requer_confirmacao == 1) {
             mensagem.mtype = mensagem.pid;
             if (msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
+                if (errno == EINTR) {
+                    return 1;
+                }
                 perror("msgsnd");
                 return 1;
             }
@@ -609,4 +629,8 @@ static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_co
         return 1;
     }
     return 0;
+}
+
+static void interromper_filho(int sig) {
+    (void)sig;
 }
