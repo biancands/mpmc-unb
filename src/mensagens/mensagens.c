@@ -455,13 +455,15 @@ static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_pro
     struct mensagem mensagem;
     mensagem.mtype = 1;
     mensagem.pid = getpid();
-    mensagem.seq = 1;
-    mensagem.tempo_envio = time(NULL);
 
     if (p != 0) {
-        if(msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
-            perror("msgsnd");
-            return;
+        for (int sequencia = 1; sequencia <= n_msgs; sequencia++) {
+            mensagem.seq = sequencia;
+            mensagem.tempo_envio = time(NULL);
+            if(msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
+                perror("msgsnd");
+                return;
+            }
         }
     }
     printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
