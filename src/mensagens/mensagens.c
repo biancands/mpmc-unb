@@ -17,6 +17,7 @@ struct mensagem {
     pid_t pid;     
     int seq;  // número sequencial da mensagem
     time_t tempo_envio;
+    int requer_confirmacao;
 };
 
 struct node_pid {
@@ -453,10 +454,10 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
 }
 
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores) {
-    (void)ack;
     struct mensagem mensagem;
     mensagem.mtype = 1;
     mensagem.pid = getpid();
+    mensagem.requer_confirmacao = (ack == 1) ? 1 : 0;
 
     for (int sequencia = 1; sequencia <= n_msgs; sequencia++) {
         int indice_fila;
