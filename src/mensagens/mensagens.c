@@ -41,6 +41,7 @@ static void remover_filas(int *ids_filas, int quantidade_filas);
 
 int executar_mensagens(int numero_produtores)
 {
+    int quantidade_filas = numero_produtores + 1;
     printf("Executando o paradigma de troca de mensagens com %d produtores...\n", numero_produtores);
 
     if (signal(SIGCHLD, recolher_filhos) == SIG_ERR) {
@@ -52,14 +53,14 @@ int executar_mensagens(int numero_produtores)
 
     int *ids_filas;
 
-    ids_filas = malloc(numero_produtores * sizeof(int));
+    ids_filas = malloc(quantidade_filas * sizeof(int));
 
     if (ids_filas == NULL) {
         perror("malloc");
         return 1;
     }
 
-    for (int indice_fila = 0; indice_fila < numero_produtores; indice_fila++) {
+    for (int indice_fila = 0; indice_fila < quantidade_filas; indice_fila++) {
         ids_filas[indice_fila] = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
         if (ids_filas[indice_fila] == -1) {
             perror("msgget");
@@ -88,7 +89,7 @@ int executar_mensagens(int numero_produtores)
             }
             encerrar_processos(head);
 
-            remover_filas(ids_filas, numero_produtores);
+            remover_filas(ids_filas, quantidade_filas);
 
             free(ids_filas);
             return resultado != 0;
@@ -139,7 +140,7 @@ int executar_mensagens(int numero_produtores)
             else {
                 encerrar_processos(head);
 
-                remover_filas(ids_filas, numero_produtores);
+                remover_filas(ids_filas, quantidade_filas);
 
                 free(ids_filas);
                 liberar_tokens(tokens);
