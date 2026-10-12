@@ -475,9 +475,15 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
             return 1;
         }
     }
-    if (ack == 1 && p != 0) {
+    if (ack == 1) {
         for (int confirmacoes_recebidas = 0; confirmacoes_recebidas < n_msgs; confirmacoes_recebidas++) {
-            if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
+            int indice_fila_confirmacao;
+            if (p == 0) {
+                indice_fila_confirmacao = confirmacoes_recebidas % numero_produtores;
+            } else {
+                indice_fila_confirmacao = p - 1;
+            }
+            if (msgrcv(ids_filas[indice_fila_confirmacao], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
                 perror("msgrcv");
                 return 1;
             }
