@@ -32,7 +32,7 @@ struct node_fila {
 static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
 static void encerrar_processos(struct node_pid *head);
-static void produz(long p, long n_msgs, long ack);
+static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
 static void consome(long p, long n_msgs, long ack);
 static int registrar_processo(struct node_pid **head, pid_t novo_pid);
 static void recolher_filhos(int sig);
@@ -249,7 +249,7 @@ int executar_mensagens(int numero_produtores)
         else if (pid == 0) {
             if (is_produz)
             {
-                produz(p, n_msgs, ack);
+                produz(p, n_msgs, ack, ids_filas, numero_produtores);
                 printf("Mensagem de produção recebida.\n");
             }
 
@@ -449,8 +449,10 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
     return 1;
 }
 
-static void produz(long p, long n_msgs, long ack) {
+static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores) {
     (void)ack;
+    (void)ids_filas;
+    (void)numero_produtores;
     printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
 }
 
