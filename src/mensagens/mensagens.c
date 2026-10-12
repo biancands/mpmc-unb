@@ -13,7 +13,6 @@
 #include <sys/msg.h>
 
 #define TIPO_MENSAGEM 1
-#define TIPO_RESULTADO 1
 
 struct mensagem {
     long mtype;  // define a categoria da mensagem
@@ -39,7 +38,7 @@ struct node_pid {
 
 static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
-static void encerrar_processos(struct node_pid *head);
+static void encerrar_processos(struct node_pid *head, int id_fila_resultados);
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
 static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short *mensagens_consumidas);
 static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor);
@@ -96,7 +95,7 @@ int executar_mensagens(int numero_produtores)
             if (resultado != 0) {
                 perror("fgets");
             }
-            encerrar_processos(head);
+            encerrar_processos(head, ids_filas[numero_produtores]);
 
             remover_filas(ids_filas, quantidade_filas);
 
@@ -147,7 +146,7 @@ int executar_mensagens(int numero_produtores)
                 continue;
             }
             else {
-                encerrar_processos(head);
+                encerrar_processos(head, ids_filas[numero_produtores]);
 
                 remover_filas(ids_filas, quantidade_filas);
 
@@ -548,13 +547,15 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
     return 0;
 }
 
-static void encerrar_processos(struct node_pid *head) {
+static void encerrar_processos(struct node_pid *head, int id_fila_resultados) {
     struct node_pid *atual = head;
+    unsigned long total_mensagens_consumidas = 0;
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
     }
     while (atual != NULL) {
         struct node_pid *proximo = atual->next;
+        struct resultado_processo resultado_p;
 
         pid_t resultado = waitpid(atual->pid, NULL, WNOHANG);
 
@@ -573,9 +574,19 @@ static void encerrar_processos(struct node_pid *head) {
             perror("waitpid");
         }
 
+        if (msgrcv(id_fila_resultados, &resultado_p, (sizeof(resultado_p) - sizeof(resultado_p.mtype)), atual->pid, IPC_NOWAIT) == -1) {
+            if (errno != ENOMSG) {
+                perror("msgrcv");
+            }
+        } else {
+            printf("Relatório recebido: pid=%d, consumidas=%hu, tempo=%.0f segundos.\n", (int)resultado_p.pid, resultado_p.mensagens_consumidas, (difftime(resultado_p.tempo_fim, atual->tempo_inicio)));
+            total_mensagens_consumidas += resultado_p.mensagens_consumidas;
+        }
+
         free(atual);
         atual = proximo;
     }
+    printf("Total de mensagens consumidas: %lu\n", total_mensagens_consumidas);
 }
 
 static void recolher_filhos(int sig) {
@@ -588,7 +599,7 @@ static void recolher_filhos(int sig) {
 
 static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_consumida) {
     struct resultado_processo resultado_processo;
-    resultado_processo.mtype = TIPO_RESULTADO;
+    resultado_processo.mtype = getpid();
     resultado_processo.tempo_fim = time(NULL);
     resultado_processo.pid = getpid();
     resultado_processo.mensagens_consumidas = quantidade_consumida;
