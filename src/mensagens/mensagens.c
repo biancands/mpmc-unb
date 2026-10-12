@@ -451,22 +451,29 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
 
 static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores) {
     (void)ack;
-    (void)numero_produtores;
     struct mensagem mensagem;
     mensagem.mtype = 1;
     mensagem.pid = getpid();
 
-    if (p != 0) {
-        for (int sequencia = 1; sequencia <= n_msgs; sequencia++) {
-            mensagem.seq = sequencia;
-            mensagem.tempo_envio = time(NULL);
-            if(msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
-                perror("msgsnd");
-                return;
-            }
+    for (int sequencia = 1; sequencia <= n_msgs; sequencia++) {
+        int indice_fila;
+        if (p == 0) {
+            indice_fila = (sequencia - 1) % numero_produtores;
+        } else {
+            indice_fila = p - 1;
+        }
+        mensagem.seq = sequencia;
+        mensagem.tempo_envio = time(NULL);
+        if(msgsnd(ids_filas[indice_fila], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
+            perror("msgsnd");
+            return;
         }
     }
-    printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
+    if (p != 0) {
+        printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
+    } else {
+        printf("produzindo %ld mensagens no padrão striped\n", n_msgs);
+    }
 }
 
 static void consome(long p, long n_msgs, long ack) {
