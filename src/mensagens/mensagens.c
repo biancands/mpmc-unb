@@ -451,8 +451,19 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid) {
 
 static void produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores) {
     (void)ack;
-    (void)ids_filas;
     (void)numero_produtores;
+    struct mensagem mensagem;
+    mensagem.mtype = 1;
+    mensagem.pid = getpid();
+    mensagem.seq = 1;
+    mensagem.tempo_envio = time(NULL);
+
+    if (p != 0) {
+        if(msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
+            perror("msgsnd");
+            return;
+        }
+    }
     printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
 }
 
