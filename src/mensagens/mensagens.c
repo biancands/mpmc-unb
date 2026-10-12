@@ -33,7 +33,7 @@ static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
 static void encerrar_processos(struct node_pid *head);
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
-static int consome(long p, long n_msgs, long ack, int *ids_filas);
+static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short *mensagens_consumidas);
 static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor);
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
@@ -261,7 +261,8 @@ int executar_mensagens(int numero_produtores)
             if (is_consome)
             {
                 int resultado_consumo;
-                resultado_consumo = consome(p, n_msgs, ack, ids_filas);
+                unsigned short mensagens_consumidas;
+                resultado_consumo = consome(p, n_msgs, ack, ids_filas, &mensagens_consumidas);
                 if (resultado_consumo == 0) {
                     printf("Consumo concluído com sucesso.\n");
                 }
@@ -502,8 +503,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
     return 0;
 }
 
-static int consome(long p, long n_msgs, long ack, int *ids_filas) {
+static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short *mensagens_consumidas) {
     int flags_recebimento = 0;
+    *mensagens_consumidas = 0;
     if (ack == 2) {
         flags_recebimento = IPC_NOWAIT;
     }
@@ -517,6 +519,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas) {
             perror("msgrcv");
             return 1;
         }
+        (*mensagens_consumidas)++;
         printf("Mensagem consumida: pid=%d, seq=%d, tempo=%lld\n", (int)mensagem.pid, mensagem.seq, (long long)mensagem.tempo_envio);
         if (mensagem.requer_confirmacao == 1) {
             mensagem.mtype = mensagem.pid;
