@@ -33,7 +33,7 @@ static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
 static void encerrar_processos(struct node_pid *head);
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
-static void consome(long p, long n_msgs, long ack);
+static void consome(long p, long n_msgs, long ack, int *ids_filas);
 static int registrar_processo(struct node_pid **head, pid_t novo_pid);
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
@@ -259,7 +259,7 @@ int executar_mensagens(int numero_produtores)
 
             if (is_consome)
             {
-                consome(p, n_msgs, ack);
+                consome(p, n_msgs, ack, ids_filas);
                 printf("Mensagem de consumo recebida.\n");
             }    
 
@@ -481,8 +481,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
     return 0;
 }
 
-static void consome(long p, long n_msgs, long ack) {
+static void consome(long p, long n_msgs, long ack, int *ids_filas) {
     (void)ack;
+    (void)ids_filas;
     printf("consumindo %ld mensagens da fila %ld\n", n_msgs, p);
 }
 
