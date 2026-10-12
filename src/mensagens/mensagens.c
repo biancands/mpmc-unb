@@ -210,7 +210,7 @@ int executar_mensagens(int numero_produtores)
         if (is_produz)
         {
             if (p >= 0 && p <= numero_produtores) {
-                printf("Mensagem de produção recebida.\n");
+                printf("Comando de produção validado.\n");
             }
             else {
                 fprintf(stderr, "Erro: para 'produz', p deve estar entre 0 e %d.\n", numero_produtores);
@@ -233,7 +233,7 @@ int executar_mensagens(int numero_produtores)
 
         liberar_tokens(tokens);
 
-        printf("Mensagem processada com sucesso.\n");
+        printf("Comando validado com sucesso.\n");
 
         printf("Valores extraídos: p = %ld, n_msgs = %ld, ack = %ld\n", p, n_msgs, ack);
 
@@ -252,7 +252,7 @@ int executar_mensagens(int numero_produtores)
                 int resultado_producao;
                 resultado_producao = produz(p, n_msgs, ack, ids_filas, numero_produtores);
                 if (resultado_producao == 0){
-                    printf("Mensagem de produção recebida.\n");
+                    printf("Produção concluída com sucesso.\n");
                 }
                 exit(resultado_producao);
             }
