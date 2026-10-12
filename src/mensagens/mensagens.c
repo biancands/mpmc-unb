@@ -486,13 +486,17 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
 }
 
 static int consome(long p, long n_msgs, long ack, int *ids_filas) {
-    if (ack != 1) {
-        fprintf(stderr, "ack = 2 ainda não foi implementado\n");
-        return 1;
+    int flags_recebimento = 0;
+    if (ack == 2) {
+        flags_recebimento = IPC_NOWAIT;
     }
     struct mensagem mensagem;
     for (int mensagens_recebidas = 0; mensagens_recebidas < n_msgs; mensagens_recebidas++) {
-        if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 1, 0) == -1) {
+        if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 1, flags_recebimento) == -1) {
+            if (ack == 2 && errno == ENOMSG) {
+                fprintf(stderr, "Erro: foram solicitadas %ld mensagens, mas apenas %d foram consumidas.\n", n_msgs, mensagens_recebidas);
+                return 1;
+            }
             perror("msgrcv");
             return 1;
         }
