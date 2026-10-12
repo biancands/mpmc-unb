@@ -24,11 +24,6 @@ struct node_pid {
     struct node_pid *next;
 };
 
-struct node_fila {
-    int id_fila;
-    struct node_fila *next;
-};
-
 static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
 static void encerrar_processos(struct node_pid *head);
@@ -222,7 +217,7 @@ int executar_mensagens(int numero_produtores)
         else if (is_consome)
         {
             if (p >= 1 && p <= numero_produtores) {
-                printf("Mensagem de consumo recebida.\n");
+                printf("Comando de consumo validado.\n");
             }
             else {
                 fprintf(stderr, "Erro: para 'consome', p deve estar entre 1 e %d.\n", numero_produtores);
@@ -262,7 +257,7 @@ int executar_mensagens(int numero_produtores)
                 int resultado_consumo;
                 resultado_consumo = consome(p, n_msgs, ack, ids_filas);
                 if (resultado_consumo == 0) {
-                    printf("Mensagem de consumo recebida.\n");
+                    printf("Consumo concluído com sucesso.\n");
                 }
                 exit(resultado_consumo);
             }    
