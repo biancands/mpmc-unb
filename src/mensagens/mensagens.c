@@ -40,7 +40,7 @@ static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
 static void encerrar_processos(struct node_pid *head, int id_fila_resultados);
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
-static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short *mensagens_consumidas);
+static int consome(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores, unsigned short *mensagens_consumidas);
 static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor);
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
@@ -51,7 +51,7 @@ static void interromper_filho(int sig);
 int executar_mensagens(int numero_produtores)
 {
     time_t tempo_inicio_mpmc = time(NULL);
-    int quantidade_filas = numero_produtores + 1;
+    int quantidade_filas = numero_produtores + 2; // +1 para confirmacoes de consumo e +1 para resultados
     printf("Executando o paradigma de troca de mensagens com %d produtores...\n", numero_produtores);
 
     if (signal(SIGCHLD, recolher_filhos) == SIG_ERR) {
@@ -97,7 +97,7 @@ int executar_mensagens(int numero_produtores)
             if (resultado != 0) {
                 perror("fgets");
             }
-            encerrar_processos(head, ids_filas[numero_produtores]);
+            encerrar_processos(head, ids_filas[numero_produtores + 1]);
 
             remover_filas(ids_filas, quantidade_filas);
 
@@ -148,7 +148,7 @@ int executar_mensagens(int numero_produtores)
                 continue;
             }
             else {
-                encerrar_processos(head, ids_filas[numero_produtores]);
+                encerrar_processos(head, ids_filas[numero_produtores + 1]);
 
                 printf("Tempo total do mpmc: %.0f segundos.\n", difftime(time(NULL), tempo_inicio_mpmc));
 
@@ -271,7 +271,7 @@ int executar_mensagens(int numero_produtores)
                 if (resultado_producao == 0){
                     printf("Produção concluída com sucesso.\n");
                 }
-                if (enviar_resultado(ids_filas[numero_produtores], 0) == 1) {
+                if (enviar_resultado(ids_filas[numero_produtores + 1], 0) == 1) {
                     resultado_producao = 1;
                 }
                 exit(resultado_producao);
@@ -281,11 +281,11 @@ int executar_mensagens(int numero_produtores)
             {
                 int resultado_consumo;
                 unsigned short mensagens_consumidas;
-                resultado_consumo = consome(p, n_msgs, ack, ids_filas, &mensagens_consumidas);
+                resultado_consumo = consome(p, n_msgs, ack, ids_filas, numero_produtores, &mensagens_consumidas);
                 if (resultado_consumo == 0) {
                     printf("Consumo concluído com sucesso.\n");
                 }
-                if (enviar_resultado(ids_filas[numero_produtores], mensagens_consumidas) == 1) {
+                if (enviar_resultado(ids_filas[numero_produtores + 1], mensagens_consumidas) == 1) {
                     resultado_consumo = 1;
                 }
                 exit(resultado_consumo);
@@ -489,6 +489,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
     mensagem.pid = getpid();
     mensagem.requer_confirmacao = (ack == 1) ? 1 : 0;
 
+    int id_fila_confirmacao = ids_filas[numero_produtores];
+    int confirmacoes_recebidas = 0;
+
     for (int sequencia = 1; sequencia <= n_msgs; sequencia++) {
         int indice_fila;
         if (p == 0) {
@@ -496,8 +499,10 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
         } else {
             indice_fila = p - 1;
         }
+
         mensagem.seq = sequencia;
         mensagem.tempo_envio = time(NULL);
+
         if(msgsnd(ids_filas[indice_fila], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
             if (errno == EINTR) {
                 return 1;
@@ -505,39 +510,47 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
             perror("msgsnd");
             return 1;
         }
-    }
-    if (ack == 1) {
-        for (int confirmacoes_recebidas = 0; confirmacoes_recebidas < n_msgs; confirmacoes_recebidas++) {
-            int indice_fila_confirmacao;
-            if (p == 0) {
-                indice_fila_confirmacao = confirmacoes_recebidas % numero_produtores;
-            } else {
-                indice_fila_confirmacao = p - 1;
+
+        if (ack == 1) {
+            while (msgrcv(id_fila_confirmacao, &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), IPC_NOWAIT) != -1) {
+                confirmacoes_recebidas++;
             }
-            if (msgrcv(ids_filas[indice_fila_confirmacao], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
-                if (errno == EINTR) {
-                    return 1;
-                }
-                perror("msgrcv");
-                return 1;
+
+            if (errno != ENOMSG && errno != EINTR) {
+                perror("msgrcv oportunista");
             }
         }
     }
-    if (p != 0) {
-        printf("produzindo %ld mensagens na fila %ld\n", n_msgs, p);
-    } else {
-        printf("produzindo %ld mensagens no padrão striped\n", n_msgs);
+
+    if (ack == 1) {
+        while (confirmacoes_recebidas < n_msgs) {
+            if (msgrcv(id_fila_confirmacao, &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
+                if (errno == EINTR) return 1;
+                perror("msgrcv final");
+                return 1;
+            }
+            confirmacoes_recebidas++;
+        }
     }
+
+    if (p != 0) {
+        printf("%ld mensagens produzidas na fila %ld\n", n_msgs, p);
+    } else {
+        printf("%ld mensagens produzidas no padrão striped\n", n_msgs);
+    }
+
     return 0;
 }
 
-static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short *mensagens_consumidas) {
+static int consome(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores, unsigned short *mensagens_consumidas) {
+    int indice_fila_confirmacao = ids_filas[numero_produtores];
     int flags_recebimento = 0;
     *mensagens_consumidas = 0;
     if (ack == 2) {
         flags_recebimento = IPC_NOWAIT;
     }
     struct mensagem mensagem;
+
     for (int mensagens_recebidas = 0; mensagens_recebidas < n_msgs; mensagens_recebidas++) {
         if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), TIPO_MENSAGEM, flags_recebimento) == -1) {
             if (ack == 2 && errno == ENOMSG) {
@@ -552,9 +565,10 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
         }
         (*mensagens_consumidas)++;
         printf("Mensagem consumida: pid=%d, seq=%d, tempo=%lld\n", (int)mensagem.pid, mensagem.seq, (long long)mensagem.tempo_envio);
+
         if (mensagem.requer_confirmacao == 1) {
             mensagem.mtype = mensagem.pid;
-            if (msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
+            if (msgsnd(indice_fila_confirmacao, &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
                 if (errno == EINTR) {
                     return 1;
                 }
@@ -563,7 +577,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
             }
         }
     }
-    printf("consumindo %ld mensagens da fila %ld\n", n_msgs, p);
+    printf("%ld mensagens consumidas da fila %ld\n", n_msgs, p);
     return 0;
 }
 
