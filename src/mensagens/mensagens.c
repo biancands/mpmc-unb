@@ -48,6 +48,8 @@ static void remover_filas(int *ids_filas, int quantidade_filas);
 static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_consumida);
 static void interromper_filho(int sig);
 
+static volatile int flag_shutdown = 0;
+
 int executar_mensagens(int numero_produtores)
 {
     time_t tempo_inicio_mpmc = time(NULL);
@@ -490,6 +492,10 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
     mensagem.requer_confirmacao = (ack == 1) ? 1 : 0;
 
     for (int sequencia = 1; sequencia <= n_msgs; sequencia++) {
+        if (flag_shutdown == 1) {
+            printf("Foram produzidas %d mensagens do total de %ld mensagens antes do shutdown por interrupção de sinal.\n", sequencia - 1, n_msgs);
+            return 1;
+        }
         int indice_fila;
         if (p == 0) {
             indice_fila = (sequencia - 1) % numero_produtores;
@@ -500,6 +506,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
         mensagem.tempo_envio = time(NULL);
         if(msgsnd(ids_filas[indice_fila], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
             if (errno == EINTR) {
+                if (flag_shutdown == 1) {
+                    printf("Foram enviadas %d mensagens do total de %ld mensagens antes do shutdown por interrupção de sinal.\n", sequencia - 1, n_msgs);
+                }
                 return 1;
             }
             perror("msgsnd");
@@ -508,6 +517,10 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
     }
     if (ack == 1) {
         for (int confirmacoes_recebidas = 0; confirmacoes_recebidas < n_msgs; confirmacoes_recebidas++) {
+            if (flag_shutdown == 1) {
+                printf("Foram recebidas %d confirmações do total de %ld confirmações antes do shutdown por interrupção de sinal.\n", confirmacoes_recebidas, n_msgs);
+                return 1;
+            }
             int indice_fila_confirmacao;
             if (p == 0) {
                 indice_fila_confirmacao = confirmacoes_recebidas % numero_produtores;
@@ -516,6 +529,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
             }
             if (msgrcv(ids_filas[indice_fila_confirmacao], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
                 if (errno == EINTR) {
+                    if (flag_shutdown == 1) {
+                        printf("Foram recebidas %d confirmações do total de %ld confirmações antes do shutdown por interrupção de sinal.\n", confirmacoes_recebidas, n_msgs);
+                    }
                     return 1;
                 }
                 perror("msgrcv");
@@ -539,12 +555,19 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
     }
     struct mensagem mensagem;
     for (int mensagens_recebidas = 0; mensagens_recebidas < n_msgs; mensagens_recebidas++) {
+        if (flag_shutdown == 1) {
+            printf("Foram consumidas %d mensagens do total de %ld mensagens antes do shutdown por interrupção de sinal.\n", mensagens_recebidas, n_msgs);
+            return 1;
+        }
         if (msgrcv(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), TIPO_MENSAGEM, flags_recebimento) == -1) {
             if (ack == 2 && errno == ENOMSG) {
                 fprintf(stderr, "Erro: foram solicitadas %ld mensagens, mas apenas %d foram consumidas.\n", n_msgs, mensagens_recebidas);
                 return 1;
             }
             if (errno == EINTR) {
+                if (flag_shutdown == 1) {
+                    printf("Foram consumidas %d mensagens do total de %ld mensagens antes do shutdown por interrupção de sinal.\n", mensagens_recebidas, n_msgs);
+                }
                 return 1;
             }
             perror("msgrcv");
@@ -556,6 +579,9 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
             mensagem.mtype = mensagem.pid;
             if (msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
                 if (errno == EINTR) {
+                    if (flag_shutdown == 1) {
+                        printf("Foram enviadas %d confirmações do total de %ld confirmações antes do shutdown por interrupção de sinal.\n", mensagens_recebidas, n_msgs);
+                    }
                     return 1;
                 }
                 perror("msgsnd");
@@ -633,4 +659,6 @@ static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_co
 
 static void interromper_filho(int sig) {
     (void)sig;
+    signal(SIGTERM, interromper_filho);
+    flag_shutdown = 1;
 }
