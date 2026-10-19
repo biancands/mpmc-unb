@@ -45,6 +45,7 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tem
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
 static void remover_filas(int *ids_filas, int quantidade_filas);
+static void remover_fila(int id_fila);
 static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_consumida);
 static void interromper_filho(int sig);
 
@@ -328,11 +329,15 @@ static void liberar_tokens(char **tokens) {
     free(tokens);
 }
 
+static void remover_fila(int id_fila) {
+    if (msgctl(id_fila, IPC_RMID, NULL) == -1) {
+        perror("msgctl");
+    }
+}
+
 static void remover_filas(int *ids_filas, int quantidade_filas) {
     for (int indice_fila = 0; indice_fila < quantidade_filas; indice_fila++) {
-        if (msgctl(ids_filas[indice_fila], IPC_RMID, NULL) == -1) {
-            perror("msgctl");
-        }
+        remover_fila(ids_filas[indice_fila]);
     }
 }
 
