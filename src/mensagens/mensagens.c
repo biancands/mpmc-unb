@@ -100,9 +100,11 @@ int executar_mensagens(int numero_produtores)
             if (resultado != 0) {
                 perror("fgets");
             }
+
+            remover_filas(ids_filas, numero_produtores);
             encerrar_processos(head, ids_filas[numero_produtores]);
 
-            remover_filas(ids_filas, quantidade_filas);
+            remover_fila(ids_filas[numero_produtores]);
 
             free(ids_filas);
             return resultado != 0;
