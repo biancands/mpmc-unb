@@ -531,7 +531,9 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
     if (ack == 1) {
         while (confirmacoes_recebidas < n_msgs) {
             if (msgrcv(id_fila_confirmacao, &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
-                if (errno == EINTR) return 1;
+                if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
+                    return 1;
+                }
                 perror("msgrcv final");
                 return 1;
             }
