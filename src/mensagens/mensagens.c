@@ -502,6 +502,7 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
             indice_fila = p - 1;
         }
 
+        mensagem.mtype = TIPO_MENSAGEM;
         mensagem.seq = sequencia;
         mensagem.tempo_envio = time(NULL);
 
