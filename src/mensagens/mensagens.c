@@ -503,7 +503,7 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
         mensagem.seq = sequencia;
         mensagem.tempo_envio = time(NULL);
         if(msgsnd(ids_filas[indice_fila], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                 return 1;
             }
             perror("msgsnd");
@@ -519,7 +519,7 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
                 indice_fila_confirmacao = p - 1;
             }
             if (msgrcv(ids_filas[indice_fila_confirmacao], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
-                if (errno == EINTR) {
+                if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                     return 1;
                 }
                 perror("msgrcv");
@@ -548,7 +548,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
                 fprintf(stderr, "Erro: foram solicitadas %ld mensagens, mas apenas %d foram consumidas.\n", n_msgs, mensagens_recebidas);
                 return 1;
             }
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                 return 1;
             }
             perror("msgrcv");
@@ -559,7 +559,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
         if (mensagem.requer_confirmacao == 1) {
             mensagem.mtype = mensagem.pid;
             if (msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
-                if (errno == EINTR) {
+                if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                     return 1;
                 }
                 perror("msgsnd");
