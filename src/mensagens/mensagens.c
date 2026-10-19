@@ -51,6 +51,10 @@ static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_co
 int executar_mensagens(int numero_produtores)
 {
     time_t tempo_inicio_mpmc = time(NULL);
+    if (numero_produtores > INT_MAX - 2) {
+        fprintf(stderr, "Erro: quantidade de produtores excede o limite suportado.\n");
+        return 1;
+    }
     int quantidade_filas = numero_produtores + 2; // +1 para confirmacoes de consumo e +1 para resultados
     printf("Executando o paradigma de troca de mensagens com %d produtores...\n", numero_produtores);
 
