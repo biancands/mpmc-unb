@@ -77,7 +77,11 @@ int executar_mensagens(int numero_produtores)
     for (int indice_fila = 0; indice_fila < quantidade_filas; indice_fila++) {
         ids_filas[indice_fila] = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
         if (ids_filas[indice_fila] == -1) {
-            perror("msgget");
+            if (errno == ENOSPC) {
+                fprintf(stderr, "Erro: limite de filas de mensagens do sistema atingido.\n");
+            } else {
+                perror("msgget");
+            }
             remover_filas(ids_filas, indice_fila);
             free(ids_filas);
             return 1;
