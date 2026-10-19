@@ -151,11 +151,13 @@ int executar_mensagens(int numero_produtores)
                 continue;
             }
             else {
+
+                remover_filas(ids_filas, numero_produtores);
                 encerrar_processos(head, ids_filas[numero_produtores]);
 
                 printf("Tempo total do mpmc: %.0f segundos.\n", difftime(time(NULL), tempo_inicio_mpmc));
 
-                remover_filas(ids_filas, quantidade_filas);
+                remover_fila(ids_filas[numero_produtores]);
 
                 free(ids_filas);
                 liberar_tokens(tokens);
@@ -608,20 +610,9 @@ static void encerrar_processos(struct node_pid *head, int id_fila_resultados) {
         struct node_pid *proximo = atual->next;
         struct resultado_processo resultado_p;
 
-        pid_t resultado = waitpid(atual->pid, NULL, WNOHANG);
+        pid_t resultado = waitpid(atual->pid, NULL, 0);
 
-        if (resultado == 0) {
-            if (kill(atual->pid, SIGTERM) == -1) {
-                // Só avisa se o erro não for "Processo já inexistente"
-                if (errno != ESRCH) {
-                    fprintf(stderr, "Erro ao enviar sinal para o processo %d: %s\n", atual->pid, strerror(errno));
-                }
-            } else {
-                if (waitpid(atual->pid, NULL, 0) == -1 && errno != ECHILD) {
-                    perror("waitpid");
-                }
-            }
-        } else if (resultado == -1 && errno != ECHILD) {
+        if (resultado == -1 && errno != ECHILD) {
             perror("waitpid");
         }
 
