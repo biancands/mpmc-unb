@@ -45,8 +45,8 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tem
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
 static void remover_filas(int *ids_filas, int quantidade_filas);
+static void remover_fila(int id_fila);
 static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_consumida);
-static void interromper_filho(int sig);
 
 int executar_mensagens(int numero_produtores)
 {
@@ -97,9 +97,11 @@ int executar_mensagens(int numero_produtores)
             if (resultado != 0) {
                 perror("fgets");
             }
+
+            remover_filas(ids_filas, numero_produtores);
             encerrar_processos(head, ids_filas[numero_produtores]);
 
-            remover_filas(ids_filas, quantidade_filas);
+            remover_fila(ids_filas[numero_produtores]);
 
             free(ids_filas);
             return resultado != 0;
@@ -148,11 +150,13 @@ int executar_mensagens(int numero_produtores)
                 continue;
             }
             else {
+
+                remover_filas(ids_filas, numero_produtores);
                 encerrar_processos(head, ids_filas[numero_produtores]);
 
                 printf("Tempo total do mpmc: %.0f segundos.\n", difftime(time(NULL), tempo_inicio_mpmc));
 
-                remover_filas(ids_filas, quantidade_filas);
+                remover_fila(ids_filas[numero_produtores]);
 
                 free(ids_filas);
                 liberar_tokens(tokens);
@@ -260,10 +264,6 @@ int executar_mensagens(int numero_produtores)
         
         // filho
         else if (pid == 0) {
-            if (signal(SIGTERM, interromper_filho) == SIG_ERR) {
-                perror("signal");
-                exit(1);
-            }
             if (is_produz)
             {
                 int resultado_producao;
@@ -326,11 +326,15 @@ static void liberar_tokens(char **tokens) {
     free(tokens);
 }
 
+static void remover_fila(int id_fila) {
+    if (msgctl(id_fila, IPC_RMID, NULL) == -1) {
+        perror("msgctl");
+    }
+}
+
 static void remover_filas(int *ids_filas, int quantidade_filas) {
     for (int indice_fila = 0; indice_fila < quantidade_filas; indice_fila++) {
-        if (msgctl(ids_filas[indice_fila], IPC_RMID, NULL) == -1) {
-            perror("msgctl");
-        }
+        remover_fila(ids_filas[indice_fila]);
     }
 }
 
@@ -499,7 +503,7 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
         mensagem.seq = sequencia;
         mensagem.tempo_envio = time(NULL);
         if(msgsnd(ids_filas[indice_fila], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                 return 1;
             }
             perror("msgsnd");
@@ -515,7 +519,7 @@ static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_prod
                 indice_fila_confirmacao = p - 1;
             }
             if (msgrcv(ids_filas[indice_fila_confirmacao], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), getpid(), 0) == -1) {
-                if (errno == EINTR) {
+                if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                     return 1;
                 }
                 perror("msgrcv");
@@ -544,7 +548,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
                 fprintf(stderr, "Erro: foram solicitadas %ld mensagens, mas apenas %d foram consumidas.\n", n_msgs, mensagens_recebidas);
                 return 1;
             }
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                 return 1;
             }
             perror("msgrcv");
@@ -555,7 +559,7 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, unsigned short
         if (mensagem.requer_confirmacao == 1) {
             mensagem.mtype = mensagem.pid;
             if (msgsnd(ids_filas[p - 1], &mensagem, (sizeof(mensagem) - sizeof(mensagem.mtype)), 0) == -1) {
-                if (errno == EINTR) {
+                if (errno == EINTR || errno == EIDRM || errno == EINVAL) {
                     return 1;
                 }
                 perror("msgsnd");
@@ -577,20 +581,9 @@ static void encerrar_processos(struct node_pid *head, int id_fila_resultados) {
         struct node_pid *proximo = atual->next;
         struct resultado_processo resultado_p;
 
-        pid_t resultado = waitpid(atual->pid, NULL, WNOHANG);
+        pid_t resultado = waitpid(atual->pid, NULL, 0);
 
-        if (resultado == 0) {
-            if (kill(atual->pid, SIGTERM) == -1) {
-                // Só avisa se o erro não for "Processo já inexistente"
-                if (errno != ESRCH) {
-                    fprintf(stderr, "Erro ao enviar sinal para o processo %d: %s\n", atual->pid, strerror(errno));
-                }
-            } else {
-                if (waitpid(atual->pid, NULL, 0) == -1 && errno != ECHILD) {
-                    perror("waitpid");
-                }
-            }
-        } else if (resultado == -1 && errno != ECHILD) {
+        if (resultado == -1 && errno != ECHILD) {
             perror("waitpid");
         }
 
@@ -629,8 +622,4 @@ static int enviar_resultado(int id_fila_resultados, unsigned short quantidade_co
         return 1;
     }
     return 0;
-}
-
-static void interromper_filho(int sig) {
-    (void)sig;
 }
