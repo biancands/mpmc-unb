@@ -49,9 +49,13 @@ int buffer_retirar(struct contexto_memoria *ctx, int indice, struct item *item, 
     /*
      * TODO (B):
      *   P(CHEIOS) (com IPC_NOWAIT se !bloqueante; vazio -> retornar 1)
-     *   -> P(MUTEX) -> *item = itens[inicio];
-     *   inicio = (inicio + 1) % CAPACIDADE_BUFFER -> V(MUTEX) -> V(VAZIOS)
-     */
+     *   -> P(MUTEX)
+     *   -> *item = itens[inicio]
+     *   -> inicio = (inicio + 1) % CAPACIDADE_BUFFER
+     *   -> consumidas_total++
+     *   -> V(MUTEX)
+     *   -> V(VAZIOS)
+    */
     (void)ctx;
     (void)indice;
     (void)item;

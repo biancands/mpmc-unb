@@ -37,22 +37,22 @@ int executar_memoria(int numero_produtores)
     /*
      * TODO (A): laço do prompt, igual ao de mensagens.c
      *   - "produz p n ack &"  -> slot = reservar_slot(&ctx, 0); fork;
-     *       filho: r = produzir_memoria(&ctx, p, n, ack, slot);
-     *              registrar_fim(&ctx, slot, 0); exit(r);
+     *       filho: r = produzir_memoria(&ctx, p, n, ack, slot); exit(r);
      *   - "consome p n ack &" -> slot = reservar_slot(&ctx, 1); fork;
      *       filho: r = consumir_memoria(&ctx, p, n, ack, slot); exit(r);
-     *       (consumir_memoria chama registrar_fim com a contagem)
-     *   - pai, após o fork: ctx.area->processos[slot].pid = pid;
+     *   - pai, após o fork: ctx.processos[slot].pid = pid;
      *   - slot == -1: recusar o comando com mensagem de erro, sem fork.
-     *   - SIGCHLD: waitpid(-1, NULL, WNOHANG) em laço (sem zumbi).
+     *   - SIGCHLD: waitpid(-1, NULL, WNOHANG) em laço (sem zumbi); para cada
+     *     pid recolhido, registrar_fim(&ctx, pid) (o handler precisa enxergar o ctx).
      */
     fprintf(stderr, "Prompt da memória compartilhada ainda não implementado.\n");
 
     /*
      * Ordem obrigatória de encerramento (shutdown e EOF):
      *   1. remover_semaforos  -> filhos bloqueados recebem EIDRM e saem
-     *   2. waitpid em todos os filhos (restaurar SIGCHLD para SIG_DFL antes)
-     *   3. imprimir_relatorio -> lê a tabela na shm
+     *   2. waitpid em todos os filhos (restaurar SIGCHLD para SIG_DFL antes),
+     *      chamando registrar_fim(&ctx, pid) para cada filho recolhido
+     *   3. imprimir_relatorio -> usa a tabela do pai e os contadores das shms
      *   4. tempo total do mpmc
      *   5. liberar_memoria    -> shmdt + IPC_RMID
      */
@@ -66,10 +66,10 @@ int criar_recursos(struct contexto_memoria *ctx, int numero_produtores)
 {
     /*
      * TODO (A):
-     *   - shmget(IPC_PRIVATE, sizeof(struct area_compartilhada)
-     *            + numero_produtores * sizeof(struct buffer_circular), ...)
-     *     cuidado com overflow nesse cálculo para p grande
-     *   - shmat, zerar a área, area->numero_buffers = numero_produtores
+     *   - uma shm de TAMANHO_SHM bytes por produtor (ids_shm[i], buffers[i]);
+     *     não existe outra shm além dessas
+     *   - shmat e zerar cada área; tratar ENOSPC (limite de shms do sistema)
+     *   - zerar ctx->processos e ctx->quantidade_fins (memória privada do pai)
      *   - id_sem_buffers: semget com 3 * numero_produtores semáforos
      *     (tratar EINVAL/ENOSPC: limite SEMMSL do sistema)
      *     SETALL: MUTEX = 1, VAZIOS = CAPACIDADE_BUFFER, CHEIOS = 0
@@ -77,10 +77,12 @@ int criar_recursos(struct contexto_memoria *ctx, int numero_produtores)
      *   - em qualquer falha, desfazer o que já foi criado
      */
     ctx->numero_produtores = numero_produtores;
-    ctx->id_shm = -1;
+    ctx->ids_shm = NULL;
+    ctx->buffers = NULL;
+    ctx->quantidade_fins = 0;
+    memset(ctx->processos, 0, sizeof(ctx->processos));
     ctx->id_sem_buffers = -1;
     ctx->id_sem_ack = -1;
-    ctx->area = NULL;
     fprintf(stderr, "criar_recursos ainda não implementado.\n");
     return -1;
 }
@@ -93,7 +95,7 @@ void remover_semaforos(struct contexto_memoria *ctx)
 
 void liberar_memoria(struct contexto_memoria *ctx)
 {
-    /* TODO (A): shmdt(ctx->area) e shmctl(ctx->id_shm, IPC_RMID, NULL), se válidos. */
+    /* TODO (A): para cada i: shmdt(buffers[i]) e shmctl(ids_shm[i], IPC_RMID, NULL); free dos dois vetores. */
     (void)ctx;
 }
 
