@@ -13,7 +13,8 @@
 #include <sys/types.h>
 #include <time.h>
 
-/* AJUSTAR conforme o enunciado (suposição: buffer limitado por fila). */
+/* O enunciado exige 2048 bytes por memória compartilhada (uma por produtor). */
+#define TAMANHO_SHM 2048
 #define CAPACIDADE_BUFFER 64
 /* Máximo de processos filhos registrados durante uma execução. */
 #define MAX_PROCESSOS 256
@@ -32,42 +33,43 @@ struct item {
     time_t tempo_envio;
 };
 
+/* Ocupa uma shm inteira de TAMANHO_SHM bytes (uma por produtor). */
 struct buffer_circular {
     int inicio;             /* próxima posição a ser lida */
     int fim;                /* próxima posição livre */
+    unsigned long consumidas_total;   /* total consumido deste buffer, protegido pelo MUTEX */
     struct item itens[CAPACIDADE_BUFFER];
 };
 
-/* Equivalente à struct resultado_processo + node_pid. */
+/* Tabela do mpmc (memória privada do pai, não fica em shm). */
 struct registro_processo {
     pid_t pid;
     int em_uso;
     int eh_consumidor;
-    int finalizado;
     time_t tempo_inicio;
-    time_t tempo_fim;
-    unsigned short mensagens_consumidas;
 };
 
-/* Layout do segmento de memória compartilhada. */
-struct area_compartilhada {
-    int numero_buffers;
-    struct registro_processo processos[MAX_PROCESSOS];
-    struct buffer_circular buffers[];   /* numero_buffers elementos */
+/* Preenchido pelo pai quando recolhe um filho (waitpid). */
+struct fim_processo {
+    pid_t pid;
+    time_t tempo_fim;
 };
 
 struct contexto_memoria {
     int numero_produtores;
-    int id_shm;
+    int *ids_shm;                       /* numero_produtores shms, uma por buffer */
+    struct buffer_circular **buffers;   /* buffers[i] = shm do produtor i + 1 */
     int id_sem_buffers;     /* 3 * numero_produtores semáforos */
     int id_sem_ack;         /* MAX_PROCESSOS semáforos, um por slot */
-    struct area_compartilhada *area;
+    struct registro_processo processos[MAX_PROCESSOS];
+    struct fim_processo fins[MAX_PROCESSOS];
+    int quantidade_fins;
 };
 
 /* ===== Pessoa A: ciclo de vida (memoria.c) ===== */
 int  criar_recursos(struct contexto_memoria *ctx, int numero_produtores);
 void remover_semaforos(struct contexto_memoria *ctx);  /* acorda bloqueados com EIDRM */
-void liberar_memoria(struct contexto_memoria *ctx);    /* shmdt + IPC_RMID */
+void liberar_memoria(struct contexto_memoria *ctx);    /* shmdt + IPC_RMID em todas as shms */
 int  reservar_slot(struct contexto_memoria *ctx, int eh_consumidor);  /* -1 se cheio */
 
 /* ===== Pessoa B: buffer sincronizado (memoria_buffer.c) ===== */
@@ -80,7 +82,7 @@ int buffer_retirar(struct contexto_memoria *ctx, int indice, struct item *item, 
 /* ===== Pessoa C: operações e resultados (memoria_ops.c) ===== */
 int  produzir_memoria(struct contexto_memoria *ctx, long p, long n_msgs, long ack, int slot);
 int  consumir_memoria(struct contexto_memoria *ctx, long p, long n_msgs, long ack, int slot);
-void registrar_fim(struct contexto_memoria *ctx, int slot, unsigned short consumidas);
+void registrar_fim(struct contexto_memoria *ctx, pid_t pid);   /* chamada pelo pai ao recolher o filho */
 void imprimir_relatorio(const struct contexto_memoria *ctx);
 
 #endif

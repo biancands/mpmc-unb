@@ -48,18 +48,6 @@ mpmc-unb/
 
 Os stubs permitem compilar e testar um paradigma mesmo quando o outro ainda não estiver implementado.
 
-## Divisão do paradigma de memória compartilhada
-
-O contrato entre as partes está em `include/memoria_interno.h`. Cada arquivo tem um único responsável, e os pontos a implementar estão marcados com `TODO (A)`, `TODO (B)` ou `TODO (C)`.
-
-| Arquivo | Responsável | Escopo |
-|---|---|---|
-| `src/memoria/memoria.c` | A | prompt, fork, criação e remoção de shm e semáforos, tabela de processos, SIGCHLD, shutdown |
-| `src/memoria/memoria_buffer.c` | B | buffer circular sincronizado com semáforos System V (`semop`), modo não bloqueante |
-| `src/memoria/memoria_ops.c` | C | produção (direta e striped), consumo, confirmação (ack), relatório e testes de integração |
-
-Alterações em `include/memoria_interno.h` devem ser combinadas entre os três antes do commit. Após alterar o header, rode `make clean`.
-
 ## Compilação
 
 | Comando | Módulos utilizados | Executável |
