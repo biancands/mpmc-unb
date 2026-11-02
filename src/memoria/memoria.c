@@ -20,13 +20,6 @@
 
 _Static_assert(sizeof(struct buffer_circular) <= TAMANHO_SHM, "buffer_circular nao cabe em TAMANHO_SHM");
 
-/* No Linux a union semun precisa ser declarada pelo programa (man 2 semctl) */
-union semun {
-    int val;
-    struct semid_ds *buf;
-    unsigned short *array;
-};
-
 /* O handler de SIGCHLD não recebe parâmetros, então guarda o contexto aqui */
 static struct contexto_memoria *ctx_sinal = NULL;
 
@@ -349,8 +342,10 @@ int reservar_slot(struct contexto_memoria *ctx, int eh_consumidor) {
 }
 
 /*
- * Cria um conjunto com 'quantidade' semáforos. Nos buffers cada trio começa com
- * MUTEX = 1, VAZIOS = CAPACIDADE_BUFFER e CHEIOS = 0. Nos de ack, tudo em 0.
+ * Cria um conjunto com 'quantidade' semáforos. O semget já entrega todos em 0,
+ * como nos exemplos da aula, então os de ack e os CHEIOS ficam como estão.
+ * Nos buffers, MUTEX e VAZIOS recebem o valor inicial com um semop de soma
+ * (MUTEX = 1, VAZIOS = CAPACIDADE_BUFFER), sem precisar de semctl.
  */
 static int criar_semaforos(int quantidade, int eh_buffers) {
     int id_sem = semget(IPC_PRIVATE, quantidade, IPC_CREAT | 0600);
@@ -365,58 +360,72 @@ static int criar_semaforos(int quantidade, int eh_buffers) {
         return -1;
     }
 
-    unsigned short *valores = calloc((size_t)quantidade, sizeof(unsigned short));
-    if (valores == NULL) {
-        perror("calloc");
-        semctl(id_sem, 0, IPC_RMID);
-        return -1;
+    if (!eh_buffers) {
+        return id_sem;
     }
 
-    if (eh_buffers) {
-        for (int i = 0; i < quantidade / 3; i++) {
-            valores[SEM_MUTEX(i)] = 1;
-            valores[SEM_VAZIOS(i)] = CAPACIDADE_BUFFER;
-            valores[SEM_CHEIOS(i)] = 0;
+    for (int i = 0; i < quantidade / 3; i++) {
+        struct sembuf operacao[2];
+
+        operacao[0].sem_num = SEM_MUTEX(i);
+        operacao[0].sem_op = 1;
+        operacao[0].sem_flg = 0;
+        operacao[1].sem_num = SEM_VAZIOS(i);
+        operacao[1].sem_op = CAPACIDADE_BUFFER;
+        operacao[1].sem_flg = 0;
+
+        if (semop(id_sem, operacao, 2) == -1) {
+            perror("semop");
+            semctl(id_sem, 0, IPC_RMID);
+            return -1;
         }
     }
 
-    union semun arg;
-    arg.array = valores;
-    if (semctl(id_sem, 0, SETALL, arg) == -1) {
-        perror("semctl SETALL");
-        free(valores);
-        semctl(id_sem, 0, IPC_RMID);
-        return -1;
-    }
-
-    free(valores);
     return id_sem;
 }
 
 static int instalar_handler_sigchld(void) {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = recolher_filhos;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
-
-    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-        perror("sigaction");
+    if (signal(SIGCHLD, recolher_filhos) == SIG_ERR) {
+        perror("signal");
         return -1;
     }
     return 0;
 }
 
+/*
+ * Com as flags do Makefile, signal() tem a semântica do System V: o handler
+ * volta para SIG_DFL a cada entrega e o SIGCHLD não fica bloqueado enquanto
+ * ele roda. Por isso o handler se reinstala logo no início e, se for
+ * interrompido por outro SIGCHLD, a chamada aninhada só avisa e deixa a
+ * coleta para a que já está em andamento (registrar_fim não é reentrante).
+ */
+static volatile sig_atomic_t recolhendo = 0;
+static volatile sig_atomic_t sigchld_pendente = 0;
+
 static void recolher_filhos(int sig) {
     (void)sig;
     int errno_salvo = errno;
-    pid_t pid;
 
-    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
-        if (ctx_sinal != NULL) {
-            registrar_fim(ctx_sinal, pid);
-        }
+    signal(SIGCHLD, recolher_filhos);
+
+    if (recolhendo) {
+        sigchld_pendente = 1;
+        errno = errno_salvo;
+        return;
     }
+
+    do {
+        pid_t pid;
+        recolhendo = 1;
+        sigchld_pendente = 0;
+        while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+            if (ctx_sinal != NULL) {
+                registrar_fim(ctx_sinal, pid);
+            }
+        }
+        recolhendo = 0;
+    } while (sigchld_pendente);
+
     errno = errno_salvo;
 }
 
@@ -424,12 +433,8 @@ static void encerrar(struct contexto_memoria *ctx, time_t tempo_inicio_mpmc) {
     /* Sem os semáforos, quem estiver bloqueado em semop recebe EIDRM e sai */
     remover_semaforos(ctx);
 
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = SIG_DFL;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-        perror("sigaction");
+    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
+        perror("signal");
     }
     ctx_sinal = NULL;
 
