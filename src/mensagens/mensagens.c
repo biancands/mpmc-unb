@@ -109,6 +109,8 @@ int executar_mensagens(int numero_produtores)
             remover_filas(ids_filas, numero_produtores + 1);
             encerrar_processos(head, ids_filas[numero_produtores + 1], numero_produtores);
 
+            printf("Tempo total do mpmc: %.0f segundos.\n", difftime(time(NULL), tempo_inicio_mpmc));
+
             remover_fila(ids_filas[numero_produtores + 1]);
 
             free(ids_filas);
