@@ -34,14 +34,15 @@ struct node_pid {
     struct node_pid *next;
     time_t tempo_inicio;
     int eh_consumidor;
+    int estrutura;
 };
 
 static char **split(const char *str, const char *delim);
 static int converter_para_inteiro(const char *str, int *sucesso);
-static void encerrar_processos(struct node_pid *head, int id_fila_resultados);
+static void encerrar_processos(struct node_pid *head, int id_fila_resultados, int numero_produtores);
 static int produz(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores);
 static int consome(long p, long n_msgs, long ack, int *ids_filas, int numero_produtores, unsigned short *mensagens_consumidas);
-static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor);
+static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor, int estrutura);
 static void recolher_filhos(int sig);
 static void liberar_tokens(char **tokens);
 static void remover_filas(int *ids_filas, int quantidade_filas);
@@ -106,7 +107,7 @@ int executar_mensagens(int numero_produtores)
                 perror("fgets");
             }
             remover_filas(ids_filas, numero_produtores + 1);
-            encerrar_processos(head, ids_filas[numero_produtores + 1]);
+            encerrar_processos(head, ids_filas[numero_produtores + 1], numero_produtores);
 
             remover_fila(ids_filas[numero_produtores + 1]);
 
@@ -158,7 +159,7 @@ int executar_mensagens(int numero_produtores)
             }
             else {
                 remover_filas(ids_filas, numero_produtores + 1);
-                encerrar_processos(head, ids_filas[numero_produtores + 1]);
+                encerrar_processos(head, ids_filas[numero_produtores + 1], numero_produtores);
 
                 printf("Tempo total do mpmc: %.0f segundos.\n", difftime(time(NULL), tempo_inicio_mpmc));
 
@@ -301,7 +302,7 @@ int executar_mensagens(int numero_produtores)
         } 
         // pai
         else {
-            if(registrar_processo(&head, pid, time(NULL), is_consome) == 0) {
+            if(registrar_processo(&head, pid, time(NULL), is_consome, (int)p) == 0) {
                 if (kill(pid, SIGTERM) == -1) {
                     if (errno != ESRCH) {
                         perror("kill");
@@ -469,7 +470,7 @@ static int converter_para_inteiro(const char *str, int *sucesso) {
     return (int)val;
 }
 
-static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor) {
+static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tempo_inicio, int eh_consumidor, int estrutura) {
     struct node_pid *next = malloc(sizeof(struct node_pid));
     if (next == NULL) {
         fprintf(stderr, "Erro ao alocar memória para o nó.\n");
@@ -480,6 +481,7 @@ static int registrar_processo(struct node_pid **head, pid_t novo_pid, time_t tem
     next->next = NULL;
     next->tempo_inicio = tempo_inicio;
     next->eh_consumidor = eh_consumidor;
+    next->estrutura = estrutura;
 
     if (*head == NULL) {
         *head = next;
@@ -597,9 +599,15 @@ static int consome(long p, long n_msgs, long ack, int *ids_filas, int numero_pro
     return 0;
 }
 
-static void encerrar_processos(struct node_pid *head, int id_fila_resultados) {
+static void encerrar_processos(struct node_pid *head, int id_fila_resultados, int numero_produtores) {
     struct node_pid *atual = head;
     unsigned long total_mensagens_consumidas = 0;
+    unsigned long *mensagens_por_estrutura = calloc((size_t)numero_produtores, sizeof(unsigned long));
+
+    if (mensagens_por_estrutura == NULL) {
+        perror("calloc");
+    }
+
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
         perror("signal");
     }
@@ -620,12 +628,24 @@ static void encerrar_processos(struct node_pid *head, int id_fila_resultados) {
         } else {
             printf("Relatório recebido: pid=%d, consumidas=%hu, tempo=%.0f segundos.\n", (int)resultado_p.pid, resultado_p.mensagens_consumidas, (difftime(resultado_p.tempo_fim, atual->tempo_inicio)));
             total_mensagens_consumidas += resultado_p.mensagens_consumidas;
+
+            if (mensagens_por_estrutura != NULL && atual->eh_consumidor && atual->estrutura >= 1 && atual->estrutura <= numero_produtores) {
+                mensagens_por_estrutura[atual->estrutura - 1] += resultado_p.mensagens_consumidas;
+            }
         }
 
         free(atual);
         atual = proximo;
     }
+
+    if (mensagens_por_estrutura != NULL) {
+        for (int estrutura = 0; estrutura < numero_produtores; estrutura++) {
+            printf("Mensagens consumidas da fila %d: %lu\n", estrutura + 1, mensagens_por_estrutura[estrutura]);
+        }
+    }
+
     printf("Total de mensagens consumidas: %lu\n", total_mensagens_consumidas);
+    free(mensagens_por_estrutura);
 }
 
 static void recolher_filhos(int sig) {
