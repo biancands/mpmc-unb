@@ -20,7 +20,7 @@
 
 _Static_assert(sizeof(struct buffer_circular) <= TAMANHO_SHM, "buffer_circular nao cabe em TAMANHO_SHM");
 
-/* O handler de SIGCHLD não recebe parâmetros, então guarda o contexto aqui */
+// usado pelo handler do SIGCHLD
 static struct contexto_memoria *ctx_sinal = NULL;
 
 static char **split(const char *str, const char *delim);
@@ -223,7 +223,7 @@ int criar_recursos(struct contexto_memoria *ctx, int numero_produtores) {
     memset(ctx->processos, 0, sizeof(ctx->processos));
     memset(ctx->fins, 0, sizeof(ctx->fins));
 
-    /* SEM_MUTEX/VAZIOS/CHEIOS usam unsigned short como índice */
+    // os índices dos semáforos são unsigned short
     if (numero_produtores > USHRT_MAX / 3) {
         fprintf(stderr, "Erro: quantidade de produtores excede o limite suportado.\n");
         return -1;
@@ -240,7 +240,7 @@ int criar_recursos(struct contexto_memoria *ctx, int numero_produtores) {
         return -1;
     }
 
-    /* -1 marca o que ainda não foi criado, para liberar_memoria saber parar */
+    // -1 = ainda não criado
     for (int i = 0; i < numero_produtores; i++) {
         ctx->ids_shm[i] = -1;
     }
@@ -325,10 +325,7 @@ void liberar_memoria(struct contexto_memoria *ctx) {
 }
 
 int reservar_slot(struct contexto_memoria *ctx, int eh_consumidor) {
-    /*
-     * Slots não são reaproveitados: o relatório final precisa de todos os
-     * processos e o semáforo de ack do slot pode ter sobrado com valor.
-     */
+    // não reaproveita slot, o relatório final precisa de todos os processos
     for (int i = 0; i < MAX_PROCESSOS; i++) {
         if (!ctx->processos[i].em_uso) {
             ctx->processos[i].em_uso = 1;
@@ -341,12 +338,7 @@ int reservar_slot(struct contexto_memoria *ctx, int eh_consumidor) {
     return -1;
 }
 
-/*
- * Cria um conjunto com 'quantidade' semáforos. O semget já entrega todos em 0,
- * como nos exemplos da aula, então os de ack e os CHEIOS ficam como estão.
- * Nos buffers, MUTEX e VAZIOS recebem o valor inicial com um semop de soma
- * (MUTEX = 1, VAZIOS = CAPACIDADE_BUFFER), sem precisar de semctl.
- */
+// o semget já cria tudo em 0, nos buffers só falta MUTEX = 1 e VAZIOS = CAPACIDADE_BUFFER
 static int criar_semaforos(int quantidade, int eh_buffers) {
     int id_sem = semget(IPC_PRIVATE, quantidade, IPC_CREAT | 0600);
     if (id_sem == -1) {
@@ -392,13 +384,6 @@ static int instalar_handler_sigchld(void) {
     return 0;
 }
 
-/*
- * Com as flags do Makefile, signal() tem a semântica do System V: o handler
- * volta para SIG_DFL a cada entrega e o SIGCHLD não fica bloqueado enquanto
- * ele roda. Por isso o handler se reinstala logo no início e, se for
- * interrompido por outro SIGCHLD, a chamada aninhada só avisa e deixa a
- * coleta para a que já está em andamento (registrar_fim não é reentrante).
- */
 static volatile sig_atomic_t recolhendo = 0;
 static volatile sig_atomic_t sigchld_pendente = 0;
 
@@ -406,8 +391,9 @@ static void recolher_filhos(int sig) {
     (void)sig;
     int errno_salvo = errno;
 
-    signal(SIGCHLD, recolher_filhos);
+    signal(SIGCHLD, recolher_filhos); // o signal volta pra SIG_DFL depois de cada sinal
 
+    // chegou outro SIGCHLD no meio do laço, o laço de fora recolhe
     if (recolhendo) {
         sigchld_pendente = 1;
         errno = errno_salvo;
@@ -430,7 +416,7 @@ static void recolher_filhos(int sig) {
 }
 
 static void encerrar(struct contexto_memoria *ctx, time_t tempo_inicio_mpmc) {
-    /* Sem os semáforos, quem estiver bloqueado em semop recebe EIDRM e sai */
+    // quem estiver travado no semop recebe EIDRM e sai
     remover_semaforos(ctx);
 
     if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
