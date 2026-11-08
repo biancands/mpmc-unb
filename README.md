@@ -9,7 +9,7 @@ Implementação do problema de múltiplos produtores e múltiplos consumidores u
 | Bianca Neves da Silva | 231013583 |
 | Guilherme Ribeiro de Macedo | 170162354 |
 | João Lucas Araújo França | 190015187 |
-| Mateus Gomes | 202014440 |
+| Mateus Gomes de Araújo | 202014440 |
 | Matheus Lacerda da Silveira | 201000136 |
 
 ## Arquitetura
