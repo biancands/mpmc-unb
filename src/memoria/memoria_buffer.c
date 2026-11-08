@@ -1,14 +1,3 @@
-/*
- * Paradigma de memória compartilhada: buffer circular sincronizado.
- * Responsável: PESSOA B
- *
- * Escopo:
- *   - sem_operar: wrapper de semop
- *   - buffer_inserir / buffer_retirar com P/V em MUTEX, VAZIOS e CHEIOS
- *   - modo não bloqueante (IPC_NOWAIT) para "consome ... 2"
- *   - EIDRM/EINVAL/EINTR retornam -1 (é assim que os filhos saem no shutdown)
- */
-
 #include <stdio.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -19,46 +8,72 @@
 
 int sem_operar(int id_sem, unsigned short num, short delta, short flags)
 {
-    /*
-     * TODO (B): struct sembuf op = { num, delta, flags }; semop(id_sem, &op, 1)
-     *   Retorno: 0 ok; 1 se IPC_NOWAIT e errno == EAGAIN; -1 nos demais erros.
-     *   Só chamar perror quando o erro não for esperado (EIDRM/EINVAL no shutdown).
-     */
-    (void)id_sem;
-    (void)num;
-    (void)delta;
-    (void)flags;
-    return -1;
+    struct sembuf operacao;
+
+    operacao.sem_num = num;
+    operacao.sem_op = delta;
+    operacao.sem_flg = flags;
+
+    if (semop(id_sem, &operacao, 1) == -1) {
+        if ((flags & IPC_NOWAIT) && errno == EAGAIN) {
+            return 1;
+        }
+        if (errno != EIDRM && errno != EINVAL && errno != EINTR) {
+            perror("semop");
+        }
+        return -1;
+    }
+
+    return 0;
 }
 
 int buffer_inserir(struct contexto_memoria *ctx, int indice, const struct item *item)
 {
-    /*
-     * TODO (B):
-     *   P(VAZIOS) -> P(MUTEX) -> itens[fim] = *item;
-     *   fim = (fim + 1) % CAPACIDADE_BUFFER -> V(MUTEX) -> V(CHEIOS)
-     */
-    (void)ctx;
-    (void)indice;
-    (void)item;
-    return -1;
+    struct buffer_circular *buffer = ctx->buffers[indice];
+
+    if (sem_operar(ctx->id_sem_buffers, SEM_VAZIOS(indice), -1, 0) != 0) {
+        return -1;
+    }
+    if (sem_operar(ctx->id_sem_buffers, SEM_MUTEX(indice), -1, 0) != 0) {
+        return -1;
+    }
+
+    buffer->itens[buffer->fim] = *item;
+    buffer->fim = (buffer->fim + 1) % CAPACIDADE_BUFFER;
+
+    if (sem_operar(ctx->id_sem_buffers, SEM_MUTEX(indice), 1, 0) != 0) {
+        return -1;
+    }
+    if (sem_operar(ctx->id_sem_buffers, SEM_CHEIOS(indice), 1, 0) != 0) {
+        return -1;
+    }
+
+    return 0;
 }
 
 int buffer_retirar(struct contexto_memoria *ctx, int indice, struct item *item, int bloqueante)
 {
-    /*
-     * TODO (B):
-     *   P(CHEIOS) (com IPC_NOWAIT se !bloqueante; vazio -> retornar 1)
-     *   -> P(MUTEX)
-     *   -> *item = itens[inicio]
-     *   -> inicio = (inicio + 1) % CAPACIDADE_BUFFER
-     *   -> consumidas_total++
-     *   -> V(MUTEX)
-     *   -> V(VAZIOS)
-    */
-    (void)ctx;
-    (void)indice;
-    (void)item;
-    (void)bloqueante;
-    return -1;
+    struct buffer_circular *buffer = ctx->buffers[indice];
+    short flags = bloqueante ? 0 : IPC_NOWAIT;
+
+    int resultado = sem_operar(ctx->id_sem_buffers, SEM_CHEIOS(indice), -1, flags);
+    if (resultado != 0) {
+        return resultado;
+    }
+    if (sem_operar(ctx->id_sem_buffers, SEM_MUTEX(indice), -1, 0) != 0) {
+        return -1;
+    }
+
+    *item = buffer->itens[buffer->inicio];
+    buffer->inicio = (buffer->inicio + 1) % CAPACIDADE_BUFFER;
+    buffer->consumidas_total++;
+
+    if (sem_operar(ctx->id_sem_buffers, SEM_MUTEX(indice), 1, 0) != 0) {
+        return -1;
+    }
+    if (sem_operar(ctx->id_sem_buffers, SEM_VAZIOS(indice), 1, 0) != 0) {
+        return -1;
+    }
+
+    return 0;
 }
